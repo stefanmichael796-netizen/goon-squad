@@ -12,9 +12,11 @@ interface LogBookSheetProps {
   onClose: () => void;
   onSuccess: () => void;
   clubId?: string | null;
+  preSelectedBook?: { id: string; title: string; authors?: string[]; coverUrl?: string; pageCount?: number } | null;
+  isReread?: boolean;
 }
 
-export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetProps) {
+export function LogBookSheet({ open, onClose, onSuccess, clubId, preSelectedBook, isReread }: LogBookSheetProps) {
   const [step, setStep] = useState<"search" | "log">("search");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GoogleBooksVolume[]>([]);
@@ -47,8 +49,20 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetP
       setFinishedMonth("");
       setFinishedDay("");
       setShareToClub(!!clubId);
+    } else if (preSelectedBook) {
+      setSelected({
+        id: preSelectedBook.id,
+        volumeInfo: {
+          title: preSelectedBook.title,
+          authors: preSelectedBook.authors,
+          imageLinks: preSelectedBook.coverUrl ? { thumbnail: preSelectedBook.coverUrl } : undefined,
+          pageCount: preSelectedBook.pageCount,
+        },
+      } as unknown as GoogleBooksVolume);
+      setStep("log");
+      setShelf("read");
     }
-  }, [open, clubId]);
+  }, [open, clubId, preSelectedBook]);
 
   async function handleSearch(q: string) {
     setQuery(q);
@@ -81,21 +95,29 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetP
     setError("");
 
     try {
+      const payload: Record<string, unknown> = {
+        rating: rating || null,
+        review: review || null,
+        shelf,
+        progressPage: shelf === "reading" && progressPage ? parseInt(progressPage) : null,
+        finishedDate: shelf === "read" && finishedYear
+          ? `${finishedYear}-${finishedMonth || "01"}-${finishedDay || "01"}`
+          : null,
+        shareToClub,
+        clubId: shareToClub ? clubId : null,
+      };
+
+      if (isReread && preSelectedBook) {
+        payload.bookId = preSelectedBook.id;
+        payload.isReread = true;
+      } else {
+        payload.googleBooksVolume = selected;
+      }
+
       const res = await fetch("/api/log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          googleBooksVolume: selected,
-          rating: rating || null,
-          review: review || null,
-          shelf,
-          progressPage: shelf === "reading" && progressPage ? parseInt(progressPage) : null,
-          finishedDate: shelf === "read" && finishedYear
-            ? `${finishedYear}-${finishedMonth || "01"}-${finishedDay || "01"}`
-            : null,
-          shareToClub,
-          clubId: shareToClub ? clubId : null,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
@@ -119,7 +141,7 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetP
       <div className="relative w-full max-w-lg bg-[var(--background)] rounded-t-2xl max-h-[85vh] overflow-y-auto animate-slide-up">
         <div className="sticky top-0 bg-[var(--background)] border-b border-[var(--border)] px-4 py-3 flex items-center justify-between z-10">
           <h2 className="font-serif font-semibold text-lg text-[var(--foreground)]">
-            {step === "search" ? "Find a book" : "Log it"}
+            {step === "search" ? "Find a book" : isReread ? "Log re-read" : "Log it"}
           </h2>
           <button onClick={onClose} className="p-1 text-[var(--muted)] hover:text-[var(--foreground)]">
             <X className="w-5 h-5" />
@@ -193,12 +215,14 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetP
                       {selected.volumeInfo.pageCount} pages
                     </p>
                   )}
-                  <button
-                    onClick={() => setStep("search")}
-                    className="text-sm text-coral mt-2 hover:underline"
-                  >
-                    Change book
-                  </button>
+                  {!isReread && (
+                    <button
+                      onClick={() => setStep("search")}
+                      className="text-sm text-coral mt-2 hover:underline"
+                    >
+                      Change book
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -336,7 +360,7 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetP
                 disabled={saving}
                 className="w-full py-3 rounded-lg bg-coral text-white font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
               >
-                {saving ? "Saving..." : "Log book"}
+                {saving ? "Saving..." : isReread ? "Log re-read" : "Log book"}
               </button>
             </div>
           )}

@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Loading } from "@/components/ui/loading";
 import { AddQuoteSheet } from "@/components/shared/add-quote-sheet";
 import { LogBookSheet } from "@/components/shared/log-book-sheet";
-import { ArrowLeft, Quote, BookPlus, Trash2 } from "lucide-react";
+import { ArrowLeft, Quote, BookPlus, Trash2, RotateCcw } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import Link from "next/link";
 import type { Book, Log, Quote as QuoteType, UserBook, ClubBook } from "@/lib/types";
@@ -25,6 +25,7 @@ export default function BookDetailPage() {
   const [clubId, setClubId] = useState<string | null>(null);
   const [quoteSheetOpen, setQuoteSheetOpen] = useState(false);
   const [logSheetOpen, setLogSheetOpen] = useState(false);
+  const [rereadSheetOpen, setRereadSheetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -160,6 +161,17 @@ export default function BookDetailPage() {
         </div>
       </div>
 
+      {/* Read count */}
+      {(() => {
+        const rereads = logs.filter((l) => l.kind === "reread").length;
+        if (rereads === 0) return null;
+        return (
+          <p className="text-sm text-[var(--muted)]">
+            Read {rereads + 1} times
+          </p>
+        );
+      })()}
+
       {/* Action buttons */}
       <div className="flex gap-2">
         <button
@@ -168,6 +180,14 @@ export default function BookDetailPage() {
         >
           <BookPlus className="w-4 h-4" /> Log
         </button>
+        {userBook?.shelf === "read" && (
+          <button
+            onClick={() => setRereadSheetOpen(true)}
+            className="flex-1 py-2.5 rounded-lg border border-coral text-coral font-medium flex items-center justify-center gap-2 transition-colors hover:bg-coral/10"
+          >
+            <RotateCcw className="w-4 h-4" /> Re-read
+          </button>
+        )}
         <button
           onClick={() => setQuoteSheetOpen(true)}
           className="flex-1 py-2.5 rounded-lg border border-[var(--border)] text-[var(--foreground)] font-medium flex items-center justify-center gap-2 transition-colors hover:bg-[var(--surface)]"
@@ -294,6 +314,21 @@ export default function BookDetailPage() {
         onClose={() => setLogSheetOpen(false)}
         onSuccess={loadData}
         clubId={clubId}
+      />
+
+      <LogBookSheet
+        open={rereadSheetOpen}
+        onClose={() => setRereadSheetOpen(false)}
+        onSuccess={loadData}
+        clubId={clubId}
+        isReread
+        preSelectedBook={book ? {
+          id: book.id,
+          title: book.title,
+          authors: book.authors || undefined,
+          coverUrl: book.cover_url || undefined,
+          pageCount: book.page_count || undefined,
+        } : null}
       />
     </div>
   );

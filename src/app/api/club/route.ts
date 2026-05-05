@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { generateInviteCode } from "@/lib/utils";
+import { volumeToBook } from "@/lib/google-books";
 import { NextResponse } from "next/server";
+import type { GoogleBooksVolume } from "@/lib/types";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -71,6 +73,64 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ club });
+  }
+
+  if (action === "set_current_book") {
+    const { googleBooksVolume } = body as { googleBooksVolume: GoogleBooksVolume };
+
+    const { data: membership } = await supabase
+      .from("club_members")
+      .select("club_id, role")
+      .eq("user_id", user.id)
+      .limit(1)
+      .single();
+
+    if (!membership) {
+      return NextResponse.json({ error: "You're not in a club" }, { status: 403 });
+    }
+
+    const bookData = volumeToBook(googleBooksVolume);
+
+    const { data: existingBook } = await supabase
+      .from("books")
+      .select("id")
+      .eq("google_books_id", bookData.google_books_id)
+      .single();
+
+    let bookId: string;
+    if (existingBook) {
+      bookId = existingBook.id;
+    } else {
+      const { data: newBook, error: bookError } = await supabase
+        .from("books")
+        .insert(bookData)
+        .select("id")
+        .single();
+
+      if (bookError || !newBook) {
+        return NextResponse.json({ error: "Failed to create book" }, { status: 500 });
+      }
+      bookId = newBook.id;
+    }
+
+    await supabase
+      .from("club_books")
+      .update({ status: "past", ended_on: new Date().toISOString().split("T")[0] })
+      .eq("club_id", membership.club_id)
+      .eq("status", "current");
+
+    const { error: cbError } = await supabase.from("club_books").insert({
+      club_id: membership.club_id,
+      book_id: bookId,
+      status: "current",
+      started_on: new Date().toISOString().split("T")[0],
+    });
+
+    if (cbError) {
+      return NextResponse.json({ error: cbError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, bookId });
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });

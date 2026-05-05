@@ -9,9 +9,9 @@ import { Loading } from "@/components/ui/loading";
 import { LogBookSheet } from "@/components/shared/log-book-sheet";
 import { Fab } from "@/components/shared/fab";
 import { timeAgo } from "@/lib/utils";
-import { Copy, Check, Share2 } from "lucide-react";
+import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen } from "lucide-react";
 import Link from "next/link";
-import type { Club, ClubMember, ClubBook, Log, Profile } from "@/lib/types";
+import type { Club, ClubMember, ClubBook, Log, Profile, GoogleBooksVolume } from "@/lib/types";
 
 export default function ClubPage() {
   const [club, setClub] = useState<Club | null>(null);
@@ -23,6 +23,12 @@ export default function ClubPage() {
   const [logSheetOpen, setLogSheetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [pickBookOpen, setPickBookOpen] = useState(false);
+  const [pickQuery, setPickQuery] = useState("");
+  const [pickResults, setPickResults] = useState<GoogleBooksVolume[]>([]);
+  const [pickSearching, setPickSearching] = useState(false);
+  const [pickSaving, setPickSaving] = useState(false);
 
   const [clubAction, setClubAction] = useState<"create" | "join">("create");
   const [clubName, setClubName] = useState("");
@@ -156,6 +162,34 @@ export default function ClubPage() {
     setFormLoading(false);
   }
 
+  async function handlePickSearch(q: string) {
+    setPickQuery(q);
+    if (q.length < 2) { setPickResults([]); return; }
+    setPickSearching(true);
+    try {
+      const res = await fetch(`/api/books/search?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      setPickResults(data.items || []);
+    } catch { setPickResults([]); }
+    setPickSearching(false);
+  }
+
+  async function handlePickBook(vol: GoogleBooksVolume) {
+    setPickSaving(true);
+    try {
+      await fetch("/api/club", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "set_current_book", googleBooksVolume: vol }),
+      });
+      setPickBookOpen(false);
+      setPickQuery("");
+      setPickResults([]);
+      loadData();
+    } catch {}
+    setPickSaving(false);
+  }
+
   if (loading) return <Loading />;
 
   if (!club) {
@@ -280,41 +314,6 @@ export default function ClubPage() {
         </div>
       </div>
 
-      {/* Invite section */}
-      <section className="p-4 rounded-xl bg-[var(--surface)] space-y-3">
-        <h2 className="font-serif font-semibold text-sm text-[var(--muted)] uppercase tracking-wide">
-          Invite friends
-        </h2>
-        <p className="text-sm text-[var(--foreground)]">
-          Share this code with people you want in the club:
-        </p>
-        <div className="flex items-center gap-3">
-          <div className="flex-1 py-3 px-4 rounded-lg bg-[var(--background)] border border-[var(--border)] text-center">
-            <span className="text-2xl font-bold tracking-[0.3em] text-coral">
-              {club.invite_code}
-            </span>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={copyInviteCode}
-            className="flex-1 py-2 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--foreground)] flex items-center justify-center gap-2 transition-colors hover:bg-[var(--background)]"
-          >
-            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            {copied ? "Copied" : "Copy code"}
-          </button>
-          <button
-            onClick={shareInvite}
-            className="flex-1 py-2 rounded-lg bg-coral text-white text-sm font-medium flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
-          >
-            <Share2 className="w-4 h-4" />
-            Share invite
-          </button>
-        </div>
-        <p className="text-xs text-[var(--muted)]">
-          They sign up on the app, then tap "Join a club" and enter this code.
-        </p>
-      </section>
 
       {/* Current read */}
       {currentBook?.book && (
@@ -372,17 +371,33 @@ export default function ClubPage() {
             })}
           </div>
 
-          <Link
-            href={`/club/discussion/${currentBook.id}`}
-            className="block text-sm text-coral hover:underline"
-          >
-            Open discussion
-          </Link>
+          <div className="flex gap-3">
+            <Link
+              href={`/club/discussion/${currentBook.id}`}
+              className="text-sm text-coral hover:underline"
+            >
+              Open discussion
+            </Link>
+            <button
+              onClick={() => setPickBookOpen(true)}
+              className="text-sm text-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              Change book
+            </button>
+          </div>
         </section>
       )}
 
       {!currentBook && (
-        <EmptyState message="No book picked yet. The club owner can set one." />
+        <section className="p-4 rounded-xl bg-[var(--surface)] space-y-3 text-center">
+          <p className="text-[var(--muted)]">No book picked yet.</p>
+          <button
+            onClick={() => setPickBookOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-coral text-white text-sm font-medium transition-opacity hover:opacity-90"
+          >
+            <BookOpen className="w-4 h-4" /> Pick a book
+          </button>
+        </section>
       )}
 
       {/* Activity feed */}
@@ -415,6 +430,8 @@ export default function ClubPage() {
                       ? "shelved"
                       : log.kind === "progress"
                       ? "updated progress on"
+                      : log.kind === "reread"
+                      ? "re-read"
                       : "favourited"}
                   </p>
                   <p className="font-serif font-medium text-[var(--foreground)] truncate">
@@ -490,6 +507,109 @@ export default function ClubPage() {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Invite button */}
+      <button
+        onClick={() => setInviteOpen(true)}
+        className="w-full py-2.5 text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors flex items-center justify-center gap-2"
+      >
+        <UserPlus className="w-4 h-4" /> Invite friends
+      </button>
+
+      {/* Invite popup */}
+      {inviteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setInviteOpen(false)} />
+          <div className="relative w-[90%] max-w-sm bg-[var(--background)] rounded-2xl p-6 space-y-4 animate-fade-in">
+            <h3 className="font-serif font-semibold text-lg text-[var(--foreground)] text-center">
+              Invite friends
+            </h3>
+            <p className="text-sm text-[var(--muted)] text-center">
+              Share this code to let others join your club:
+            </p>
+            <div className="py-3 px-4 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-center">
+              <span className="text-2xl font-bold tracking-[0.3em] text-coral">
+                {club.invite_code}
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={copyInviteCode}
+                className="flex-1 py-2 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--foreground)] flex items-center justify-center gap-2 transition-colors hover:bg-[var(--surface)]"
+              >
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? "Copied" : "Copy"}
+              </button>
+              <button
+                onClick={shareInvite}
+                className="flex-1 py-2 rounded-lg bg-coral text-white text-sm font-medium flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
+              >
+                <Share2 className="w-4 h-4" /> Share
+              </button>
+            </div>
+            <p className="text-xs text-[var(--muted)] text-center">
+              They sign up, tap &ldquo;Join a club&rdquo; and enter this code.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Pick book sheet */}
+      {pickBookOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setPickBookOpen(false)} />
+          <div className="relative w-full max-w-lg bg-[var(--background)] rounded-t-2xl max-h-[85vh] overflow-y-auto animate-slide-up">
+            <div className="sticky top-0 bg-[var(--background)] border-b border-[var(--border)] px-4 py-3 flex items-center justify-between z-10">
+              <h2 className="font-serif font-semibold text-lg text-[var(--foreground)]">
+                Pick club book
+              </h2>
+              <button onClick={() => setPickBookOpen(false)} className="p-1 text-[var(--muted)] hover:text-[var(--foreground)]">
+                ✕
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 w-4 h-4 text-[var(--muted)]" />
+                <input
+                  type="text"
+                  value={pickQuery}
+                  onChange={(e) => handlePickSearch(e.target.value)}
+                  placeholder="Search by title or author"
+                  autoFocus
+                  className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
+                />
+                {pickSearching && (
+                  <Loader2 className="absolute right-3 top-3 w-4 h-4 text-[var(--muted)] animate-spin" />
+                )}
+              </div>
+              <div className="space-y-2">
+                {pickResults.map((vol) => (
+                  <button
+                    key={vol.id}
+                    onClick={() => handlePickBook(vol)}
+                    disabled={pickSaving}
+                    className="w-full flex gap-3 p-3 rounded-lg hover:bg-[var(--surface)] transition-colors text-left disabled:opacity-50"
+                  >
+                    <BookCover
+                      coverUrl={vol.volumeInfo.imageLinks?.thumbnail}
+                      title={vol.volumeInfo.title}
+                      size="sm"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-serif font-medium text-[var(--foreground)] truncate">
+                        {vol.volumeInfo.title}
+                      </p>
+                      <p className="text-sm text-[var(--muted)]">
+                        {vol.volumeInfo.authors?.join(", ")}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       <LogBookSheet

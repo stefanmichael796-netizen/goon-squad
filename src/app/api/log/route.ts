@@ -61,43 +61,23 @@ export async function POST(request: Request) {
       ? Math.min(100, (progressPage / googleBooksVolume.volumeInfo.pageCount) * 100)
       : null;
 
-  const { data: existingUserBook } = await supabase
+  const { error: upsertError } = await supabase
     .from("user_books")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("book_id", bookId)
-    .single();
-
-  if (existingUserBook) {
-    const { error: updateError } = await supabase
-      .from("user_books")
-      .update({
+    .upsert(
+      {
+        user_id: user.id,
+        book_id: bookId,
         shelf,
         progress_page: progressPage,
         progress_pct: progressPct,
-        started_at: shelf === "reading" ? today : undefined,
-        finished_at: shelf === "read" ? today : undefined,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", existingUserBook.id);
+        started_at: shelf === "reading" ? today : null,
+        finished_at: shelf === "read" ? today : null,
+      },
+      { onConflict: "user_id,book_id" }
+    );
 
-    if (updateError) {
-      return NextResponse.json({ error: "Failed to update user book", details: updateError.message }, { status: 500 });
-    }
-  } else {
-    const { error: insertError } = await supabase.from("user_books").insert({
-      user_id: user.id,
-      book_id: bookId,
-      shelf,
-      progress_page: progressPage,
-      progress_pct: progressPct,
-      started_at: shelf === "reading" ? today : null,
-      finished_at: shelf === "read" ? today : null,
-    });
-
-    if (insertError) {
-      return NextResponse.json({ error: "Failed to create user book", details: insertError.message }, { status: 500 });
-    }
+  if (upsertError) {
+    return NextResponse.json({ error: "Failed to save book", details: upsertError.message }, { status: 500 });
   }
 
   let resolvedClubId = shareToClub && clubId ? clubId : null;

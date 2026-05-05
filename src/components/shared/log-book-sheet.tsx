@@ -26,6 +26,7 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetP
   const [progressPage, setProgressPage] = useState("");
   const [shareToClub, setShareToClub] = useState(!!clubId);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const supabase = createClient();
 
@@ -71,6 +72,7 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetP
   async function handleSubmit() {
     if (!selected) return;
     setSaving(true);
+    setError("");
 
     try {
       const res = await fetch("/api/log", {
@@ -90,9 +92,12 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetP
       if (res.ok) {
         onSuccess();
         onClose();
+      } else {
+        const data = await res.json();
+        setError(data.details || data.error || "Failed to save");
       }
     } catch {
-      // handle error
+      setError("Network error. Try again.");
     }
     setSaving(false);
   }
@@ -264,6 +269,10 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetP
                     />
                   </button>
                 </div>
+              )}
+
+              {error && (
+                <p className="text-sm text-red-500">{error}</p>
               )}
 
               <button

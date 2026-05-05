@@ -50,12 +50,12 @@ export async function POST(request: Request) {
       .single();
 
     if (bookError || !newBook) {
-      return NextResponse.json({ error: "Failed to create book" }, { status: 500 });
+      return NextResponse.json({ error: "Failed to create book", details: bookError?.message }, { status: 500 });
     }
     bookId = newBook.id;
   }
 
-  const now = new Date().toISOString();
+  const today = new Date().toISOString().split("T")[0];
   const progressPct =
     progressPage && googleBooksVolume.volumeInfo.pageCount
       ? Math.min(100, (progressPage / googleBooksVolume.volumeInfo.pageCount) * 100)
@@ -69,29 +69,35 @@ export async function POST(request: Request) {
     .single();
 
   if (existingUserBook) {
-    await supabase
+    const { error: updateError } = await supabase
       .from("user_books")
       .update({
         shelf,
         progress_page: progressPage,
         progress_pct: progressPct,
-        started_at: shelf === "reading" ? now : undefined,
-        finished_at: shelf === "read" ? now : undefined,
-        updated_at: now,
+        started_at: shelf === "reading" ? today : undefined,
+        finished_at: shelf === "read" ? today : undefined,
+        updated_at: new Date().toISOString(),
       })
       .eq("id", existingUserBook.id);
+
+    if (updateError) {
+      return NextResponse.json({ error: "Failed to update user book", details: updateError.message }, { status: 500 });
+    }
   } else {
-    await supabase.from("user_books").insert({
+    const { error: insertError } = await supabase.from("user_books").insert({
       user_id: user.id,
       book_id: bookId,
       shelf,
       progress_page: progressPage,
       progress_pct: progressPct,
-      started_at: shelf === "reading" ? now : null,
-      finished_at: shelf === "read" ? now : null,
-      created_at: now,
-      updated_at: now,
+      started_at: shelf === "reading" ? today : null,
+      finished_at: shelf === "read" ? today : null,
     });
+
+    if (insertError) {
+      return NextResponse.json({ error: "Failed to create user book", details: insertError.message }, { status: 500 });
+    }
   }
 
   let resolvedClubId = shareToClub && clubId ? clubId : null;
@@ -108,7 +114,7 @@ export async function POST(request: Request) {
     clubBookId = clubBook?.id || null;
   }
 
-  const logEntry = {
+  const { error: logError } = await supabase.from("logs").insert({
     user_id: user.id,
     book_id: bookId,
     club_id: resolvedClubId,
@@ -118,9 +124,11 @@ export async function POST(request: Request) {
     review,
     shelf,
     progress_pct: progressPct,
-  };
+  });
 
-  await supabase.from("logs").insert(logEntry);
+  if (logError) {
+    return NextResponse.json({ error: "Failed to create log", details: logError.message }, { status: 500 });
+  }
 
   return NextResponse.json({ success: true, bookId });
 }

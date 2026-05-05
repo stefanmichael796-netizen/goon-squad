@@ -9,7 +9,7 @@ import { Loading } from "@/components/ui/loading";
 import { LogBookSheet } from "@/components/shared/log-book-sheet";
 import { Fab } from "@/components/shared/fab";
 import { timeAgo } from "@/lib/utils";
-import { BarChart3, LogOut } from "lucide-react";
+import { BarChart3, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Profile, UserBook, Log, Quote } from "@/lib/types";
@@ -159,6 +159,18 @@ export default function PersonalPage() {
     loadData();
   }
 
+  async function moveFavourite(index: number, direction: -1 | 1) {
+    const swapIndex = index + direction;
+    if (swapIndex < 0 || swapIndex >= favourites.length) return;
+    const a = favourites[index];
+    const b = favourites[swapIndex];
+    await Promise.all([
+      supabase.from("user_books").update({ favourite_rank: swapIndex + 1 }).eq("id", a.id),
+      supabase.from("user_books").update({ favourite_rank: index + 1 }).eq("id", b.id),
+    ]);
+    loadData();
+  }
+
   if (loading) return <Loading />;
 
   return (
@@ -215,13 +227,31 @@ export default function PersonalPage() {
               const fav = favourites[i];
               if (fav?.book) {
                 return (
-                  <Link key={fav.id} href={`/book/${fav.book_id}`}>
-                    <BookCover
-                      coverUrl={(fav.book as any).cover_url}
-                      title={(fav.book as any).title}
-                      size="md"
-                    />
-                  </Link>
+                  <div key={fav.id} className="flex flex-col items-center gap-1">
+                    <Link href={`/book/${fav.book_id}`}>
+                      <BookCover
+                        coverUrl={(fav.book as any).cover_url}
+                        title={(fav.book as any).title}
+                        size="md"
+                      />
+                    </Link>
+                    <div className="flex gap-0.5">
+                      <button
+                        onClick={() => moveFavourite(i, -1)}
+                        disabled={i === 0}
+                        className="p-0.5 text-[var(--muted)] hover:text-coral disabled:opacity-20 transition-colors"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => moveFavourite(i, 1)}
+                        disabled={i === favourites.length - 1}
+                        className="p-0.5 text-[var(--muted)] hover:text-coral disabled:opacity-20 transition-colors"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 );
               }
               return (

@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Loading } from "@/components/ui/loading";
 import { AddQuoteSheet } from "@/components/shared/add-quote-sheet";
 import { LogBookSheet } from "@/components/shared/log-book-sheet";
-import { ArrowLeft, Quote, BookPlus } from "lucide-react";
+import { ArrowLeft, Quote, BookPlus, Trash2 } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import Link from "next/link";
 import type { Book, Log, Quote as QuoteType, UserBook, ClubBook } from "@/lib/types";
@@ -106,6 +106,19 @@ export default function BookDetailPage() {
     loadData();
   }
 
+  async function removeBook() {
+    if (!userBook) return;
+    if (!confirm("Remove this book from your shelves?")) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from("user_books").delete().eq("id", userBook.id);
+    await supabase.from("logs").delete().eq("user_id", user.id).eq("book_id", bookId);
+    await supabase.from("quotes").delete().eq("user_id", user.id).eq("book_id", bookId);
+    loadData();
+  }
+
   if (loading) return <Loading />;
   if (!book) return <EmptyState message="Book not found." />;
 
@@ -181,6 +194,14 @@ export default function BookDetailPage() {
             </button>
           ))}
         </div>
+        {userBook && (
+          <button
+            onClick={removeBook}
+            className="mt-2 text-sm text-red-500 hover:text-red-400 flex items-center gap-1 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Remove from shelves
+          </button>
+        )}
       </div>
 
       {clubBook && (

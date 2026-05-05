@@ -9,7 +9,7 @@ import { Loading } from "@/components/ui/loading";
 import { LogBookSheet } from "@/components/shared/log-book-sheet";
 import { Fab } from "@/components/shared/fab";
 import { timeAgo } from "@/lib/utils";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, Share2 } from "lucide-react";
 import Link from "next/link";
 import type { Club, ClubMember, ClubBook, Log, Profile } from "@/lib/types";
 
@@ -23,6 +23,14 @@ export default function ClubPage() {
   const [logSheetOpen, setLogSheetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+
+  const [clubAction, setClubAction] = useState<"create" | "join">("create");
+  const [clubName, setClubName] = useState("");
+  const [clubDescription, setClubDescription] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [formError, setFormError] = useState("");
+  const [formLoading, setFormLoading] = useState(false);
+
   const supabase = createClient();
 
   const loadData = useCallback(async () => {
@@ -103,12 +111,154 @@ export default function ClubPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  async function shareInvite() {
+    if (!club) return;
+    const text = `Join my book club "${club.name}" on Goon Squad! Use invite code: ${club.invite_code}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Join my book club", text });
+      } catch {
+        copyInviteCode();
+      }
+    } else {
+      copyInviteCode();
+    }
+  }
+
+  async function handleClubSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setFormLoading(true);
+    setFormError("");
+
+    try {
+      const res = await fetch("/api/club", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          clubAction === "create"
+            ? { action: "create", name: clubName, description: clubDescription }
+            : { action: "join", inviteCode }
+        ),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setFormError(data.error || "Something went wrong");
+        setFormLoading(false);
+        return;
+      }
+
+      loadData();
+    } catch {
+      setFormError("Something went wrong");
+    }
+    setFormLoading(false);
+  }
+
   if (loading) return <Loading />;
 
   if (!club) {
     return (
-      <div className="max-w-lg mx-auto w-full px-4 py-6">
-        <EmptyState message="You're not in a club yet. Go back and join one." />
+      <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6 animate-fade-in">
+        <div className="text-center space-y-2">
+          <h1 className="text-2xl font-serif font-bold text-[var(--foreground)]">
+            Join a book club
+          </h1>
+          <p className="text-[var(--muted)]">
+            Every reader needs a crew.
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => setClubAction("create")}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              clubAction === "create"
+                ? "bg-coral text-white"
+                : "bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)]"
+            }`}
+          >
+            Create a club
+          </button>
+          <button
+            onClick={() => setClubAction("join")}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              clubAction === "join"
+                ? "bg-coral text-white"
+                : "bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)]"
+            }`}
+          >
+            Join a club
+          </button>
+        </div>
+
+        <form onSubmit={handleClubSubmit} className="space-y-4">
+          {clubAction === "create" ? (
+            <>
+              <div>
+                <label htmlFor="clubName" className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                  Club name
+                </label>
+                <input
+                  id="clubName"
+                  type="text"
+                  value={clubName}
+                  onChange={(e) => setClubName(e.target.value)}
+                  required
+                  placeholder="The Slow Readers"
+                  className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
+                />
+              </div>
+              <div>
+                <label htmlFor="clubDesc" className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                  Description
+                </label>
+                <textarea
+                  id="clubDesc"
+                  value={clubDescription}
+                  onChange={(e) => setClubDescription(e.target.value)}
+                  placeholder="Optional"
+                  rows={2}
+                  className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50 resize-none"
+                />
+              </div>
+            </>
+          ) : (
+            <div>
+              <label htmlFor="inviteCodeInput" className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                Invite code
+              </label>
+              <input
+                id="inviteCodeInput"
+                type="text"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                required
+                placeholder="ABC123"
+                maxLength={6}
+                className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50 uppercase tracking-widest text-center text-lg"
+              />
+              <p className="text-xs text-[var(--muted)] mt-1">
+                Ask your club owner for the 6-character code
+              </p>
+            </div>
+          )}
+
+          {formError && <p className="text-sm text-red-500">{formError}</p>}
+
+          <button
+            type="submit"
+            disabled={formLoading}
+            className="w-full py-3 rounded-lg bg-coral text-white font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {formLoading
+              ? "Setting up..."
+              : clubAction === "create"
+              ? "Create club"
+              : "Join club"}
+          </button>
+        </form>
       </div>
     );
   }
@@ -127,15 +277,44 @@ export default function ClubPage() {
           <span className="text-sm text-[var(--muted)]">
             {members.length} {members.length === 1 ? "member" : "members"}
           </span>
-          <button
-            onClick={copyInviteCode}
-            className="inline-flex items-center gap-1 text-sm text-coral hover:underline"
-          >
-            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            {copied ? "Copied" : club.invite_code}
-          </button>
         </div>
       </div>
+
+      {/* Invite section */}
+      <section className="p-4 rounded-xl bg-[var(--surface)] space-y-3">
+        <h2 className="font-serif font-semibold text-sm text-[var(--muted)] uppercase tracking-wide">
+          Invite friends
+        </h2>
+        <p className="text-sm text-[var(--foreground)]">
+          Share this code with people you want in the club:
+        </p>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 py-3 px-4 rounded-lg bg-[var(--background)] border border-[var(--border)] text-center">
+            <span className="text-2xl font-bold tracking-[0.3em] text-coral">
+              {club.invite_code}
+            </span>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={copyInviteCode}
+            className="flex-1 py-2 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--foreground)] flex items-center justify-center gap-2 transition-colors hover:bg-[var(--background)]"
+          >
+            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            {copied ? "Copied" : "Copy code"}
+          </button>
+          <button
+            onClick={shareInvite}
+            className="flex-1 py-2 rounded-lg bg-coral text-white text-sm font-medium flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
+          >
+            <Share2 className="w-4 h-4" />
+            Share invite
+          </button>
+        </div>
+        <p className="text-xs text-[var(--muted)]">
+          They sign up on the app, then tap "Join a club" and enter this code.
+        </p>
+      </section>
 
       {/* Current read */}
       {currentBook?.book && (

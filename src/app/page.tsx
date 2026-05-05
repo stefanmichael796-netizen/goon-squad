@@ -13,11 +13,6 @@ export default function LandingPage() {
           </p>
         </div>
 
-        <p className="text-[var(--foreground)] opacity-80 leading-relaxed">
-          Track what you read. Share it with your book club.
-          Build a picture of your reading life over time.
-        </p>
-
         <div className="flex flex-col gap-3">
           <Link
             href="/signup"
@@ -32,11 +27,6 @@ export default function LandingPage() {
             Sign in
           </Link>
         </div>
-
-        <p className="text-sm text-[var(--muted)]">
-          Named after Jennifer Egan&rsquo;s novel. The goon is time,
-          and this app is for tracking what you read before it slips past.
-        </p>
       </main>
     </div>
   );

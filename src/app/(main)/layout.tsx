@@ -8,7 +8,7 @@ export default function MainLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col flex-1 pb-16">
+    <div className="flex flex-col flex-1 pt-16">
       {children}
       <BottomNav />
     </div>

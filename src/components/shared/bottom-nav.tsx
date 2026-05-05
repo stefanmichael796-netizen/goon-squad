@@ -14,7 +14,7 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] z-50">
+    <nav className="fixed top-0 left-0 right-0 bg-[var(--surface)] border-b border-[var(--border)] z-50">
       <div className="max-w-lg mx-auto flex">
         {tabs.map((tab) => {
           const active = pathname.startsWith(tab.href);

@@ -24,6 +24,9 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetP
   const [review, setReview] = useState("");
   const [shelf, setShelf] = useState<"reading" | "want" | "read">("read");
   const [progressPage, setProgressPage] = useState("");
+  const [finishedYear, setFinishedYear] = useState("");
+  const [finishedMonth, setFinishedMonth] = useState("");
+  const [finishedDay, setFinishedDay] = useState("");
   const [shareToClub, setShareToClub] = useState(!!clubId);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -40,6 +43,9 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetP
       setReview("");
       setShelf("read");
       setProgressPage("");
+      setFinishedYear("");
+      setFinishedMonth("");
+      setFinishedDay("");
       setShareToClub(!!clubId);
     }
   }, [open, clubId]);
@@ -84,6 +90,9 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetP
           review: review || null,
           shelf,
           progressPage: shelf === "reading" && progressPage ? parseInt(progressPage) : null,
+          finishedDate: shelf === "read" && finishedYear
+            ? `${finishedYear}-${finishedMonth || "01"}-${finishedDay || "01"}`
+            : null,
           shareToClub,
           clubId: shareToClub ? clubId : null,
         }),
@@ -248,6 +257,53 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId }: LogBookSheetP
                     max={selected.volumeInfo.pageCount || 9999}
                     className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
                   />
+                </div>
+              )}
+
+              {shelf === "read" && (
+                <div>
+                  <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                    When did you finish it?
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <input
+                        type="number"
+                        value={finishedYear}
+                        onChange={(e) => setFinishedYear(e.target.value)}
+                        placeholder="Year"
+                        min={1900}
+                        max={new Date().getFullYear()}
+                        className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] text-center focus:outline-none focus:ring-2 focus:ring-coral/50"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <select
+                        value={finishedMonth}
+                        onChange={(e) => setFinishedMonth(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
+                      >
+                        <option value="">Month</option>
+                        {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
+                          <option key={m} value={String(i + 1).padStart(2, "0")}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        type="number"
+                        value={finishedDay}
+                        onChange={(e) => setFinishedDay(e.target.value)}
+                        placeholder="Day"
+                        min={1}
+                        max={31}
+                        className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] text-center focus:outline-none focus:ring-2 focus:ring-coral/50"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-[var(--muted)] mt-1">
+                    Only year is needed. Leave blank for today.
+                  </p>
                 </div>
               )}
 

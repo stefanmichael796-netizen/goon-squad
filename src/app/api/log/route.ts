@@ -18,6 +18,7 @@ export async function POST(request: Request) {
     review,
     shelf,
     progressPage,
+    finishedDate,
     shareToClub,
     clubId,
   } = body as {
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
     review: string | null;
     shelf: "reading" | "want" | "read";
     progressPage: number | null;
+    finishedDate: string | null;
     shareToClub: boolean;
     clubId: string | null;
   };
@@ -71,7 +73,7 @@ export async function POST(request: Request) {
         progress_page: progressPage,
         progress_pct: progressPct,
         started_at: shelf === "reading" ? today : null,
-        finished_at: shelf === "read" ? today : null,
+        finished_at: shelf === "read" ? (finishedDate || today) : null,
       },
       { onConflict: "user_id,book_id" }
     );

@@ -194,14 +194,6 @@ export default function BookDetailPage() {
             </button>
           ))}
         </div>
-        {userBook && (
-          <button
-            onClick={removeBook}
-            className="mt-2 text-sm text-red-500 hover:text-red-400 flex items-center gap-1 transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" /> Remove from shelves
-          </button>
-        )}
       </div>
 
       {clubBook && (
@@ -277,6 +269,15 @@ export default function BookDetailPage() {
             ))}
           </div>
         </section>
+      )}
+
+      {userBook && (
+        <button
+          onClick={removeBook}
+          className="w-full py-2.5 text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors flex items-center justify-center gap-2"
+        >
+          <Trash2 className="w-4 h-4" /> Remove from shelves
+        </button>
       )}
 
       <AddQuoteSheet

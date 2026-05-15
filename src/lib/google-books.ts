@@ -14,11 +14,16 @@ export async function searchBooks(
     ...(apiKey ? { key: apiKey } : {}),
   });
 
-  const res = await fetch(`${API_BASE}?${params}`);
-  if (!res.ok) return [];
-
-  const data = await res.json();
-  return data.items || [];
+  try {
+    const res = await fetch(`${API_BASE}?${params}`, {
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.items || [];
+  } catch {
+    return [];
+  }
 }
 
 export async function getBookById(

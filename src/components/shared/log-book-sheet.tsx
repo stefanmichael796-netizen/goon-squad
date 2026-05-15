@@ -14,9 +14,10 @@ interface LogBookSheetProps {
   clubId?: string | null;
   preSelectedBook?: { id: string; title: string; authors?: string[]; coverUrl?: string; pageCount?: number } | null;
   isReread?: boolean;
+  preSelectedVolume?: GoogleBooksVolume | null;
 }
 
-export function LogBookSheet({ open, onClose, onSuccess, clubId, preSelectedBook, isReread }: LogBookSheetProps) {
+export function LogBookSheet({ open, onClose, onSuccess, clubId, preSelectedBook, isReread, preSelectedVolume }: LogBookSheetProps) {
   const [step, setStep] = useState<"search" | "log">("search");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GoogleBooksVolume[]>([]);
@@ -49,6 +50,9 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId, preSelectedBook
       setFinishedMonth("");
       setFinishedDay("");
       setShareToClub(!!clubId);
+    } else if (preSelectedVolume) {
+      setSelected(preSelectedVolume);
+      setStep("log");
     } else if (preSelectedBook) {
       setSelected({
         id: preSelectedBook.id,
@@ -62,7 +66,7 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId, preSelectedBook
       setStep("log");
       setShelf("read");
     }
-  }, [open, clubId, preSelectedBook]);
+  }, [open, clubId, preSelectedBook, preSelectedVolume]);
 
   async function handleSearch(q: string) {
     setQuery(q);

@@ -1,18 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { StarRating } from "@/components/ui/star-rating";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Loading } from "@/components/ui/loading";
 import { LogBookSheet } from "@/components/shared/log-book-sheet";
-import { Fab } from "@/components/shared/fab";
 import { timeAgo } from "@/lib/utils";
-import { BarChart3, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
+import { BarChart3, LogOut, ChevronLeft, ChevronRight, Search, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Profile, UserBook, Log, Quote } from "@/lib/types";
+import type { Profile, UserBook, Log, Quote, GoogleBooksVolume } from "@/lib/types";
 
 type ShelfTab = "reading" | "want" | "read";
 
@@ -27,6 +26,12 @@ export default function PersonalPage() {
   const [logSheetOpen, setLogSheetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [clubId, setClubId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<GoogleBooksVolume[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [selectedVolume, setSelectedVolume] = useState<GoogleBooksVolume | null>(null);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const supabase = createClient();
   const router = useRouter();
 
@@ -171,6 +176,29 @@ export default function PersonalPage() {
     loadData();
   }
 
+  function handleSearch(q: string) {
+    setSearchQuery(q);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    if (q.length < 2) { setSearchResults([]); return; }
+    searchTimeout.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(`/api/books/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        setSearchResults(data.items || []);
+      } catch { setSearchResults([]); }
+      setSearching(false);
+    }, 400);
+  }
+
+  function selectSearchResult(vol: GoogleBooksVolume) {
+    setSelectedVolume(vol);
+    setLogSheetOpen(true);
+    setSearchQuery("");
+    setSearchResults([]);
+    setSearchFocused(false);
+  }
+
   if (loading) return <Loading />;
 
   return (
@@ -213,6 +241,59 @@ export default function PersonalPage() {
           </button>
         </div>
       </div>
+
+      {/* Search bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-3 w-4 h-4 text-[var(--muted)]" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => handleSearch(e.target.value)}
+          onFocus={() => setSearchFocused(true)}
+          placeholder="Search books to add..."
+          className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
+        />
+        {searching && (
+          <Loader2 className="absolute right-3 top-3 w-4 h-4 text-[var(--muted)] animate-spin" />
+        )}
+
+        {searchFocused && searchResults.length > 0 && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--background)] border border-[var(--border)] rounded-lg shadow-lg z-30 max-h-80 overflow-y-auto">
+            {searchResults.map((vol) => (
+              <button
+                key={vol.id}
+                onClick={() => selectSearchResult(vol)}
+                className="w-full flex gap-3 p-3 hover:bg-[var(--surface)] transition-colors text-left border-b border-[var(--border)] last:border-b-0"
+              >
+                <BookCover
+                  coverUrl={vol.volumeInfo.imageLinks?.thumbnail}
+                  title={vol.volumeInfo.title}
+                  size="sm"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-serif font-medium text-[var(--foreground)] truncate">
+                    {vol.volumeInfo.title}
+                  </p>
+                  <p className="text-sm text-[var(--muted)]">
+                    {vol.volumeInfo.authors?.join(", ")}
+                  </p>
+                  <p className="text-xs text-[var(--muted)]">
+                    {vol.volumeInfo.publishedDate}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Dismiss search overlay */}
+      {searchFocused && searchResults.length > 0 && (
+        <div
+          className="fixed inset-0 z-20"
+          onClick={() => { setSearchFocused(false); setSearchResults([]); }}
+        />
+      )}
 
       {/* 5 Favourites shelf */}
       <section>
@@ -437,11 +518,11 @@ export default function PersonalPage() {
 
       <LogBookSheet
         open={logSheetOpen}
-        onClose={() => setLogSheetOpen(false)}
+        onClose={() => { setLogSheetOpen(false); setSelectedVolume(null); }}
         onSuccess={loadData}
         clubId={clubId}
+        preSelectedVolume={selectedVolume}
       />
-      <Fab onClick={() => setLogSheetOpen(true)} />
     </div>
   );
 }

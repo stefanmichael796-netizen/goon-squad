@@ -35,7 +35,7 @@ export default function BookDetailPage() {
 
     const [bookRes, userBookRes, logsRes, quotesRes, memberRes] = await Promise.all([
       supabase.from("books").select("*").eq("id", bookId).single(),
-      supabase.from("user_books").select("*").eq("user_id", user.id).eq("book_id", bookId).single(),
+      supabase.from("user_books").select("*").eq("user_id", user.id).eq("book_id", bookId).order("created_at", { ascending: false }).limit(1),
       supabase
         .from("logs")
         .select("*")
@@ -52,7 +52,7 @@ export default function BookDetailPage() {
     ]);
 
     if (bookRes.data) setBook(bookRes.data);
-    if (userBookRes.data) setUserBook(userBookRes.data);
+    if (userBookRes.data && userBookRes.data.length > 0) setUserBook(userBookRes.data[0]);
     if (logsRes.data) setLogs(logsRes.data);
     if (quotesRes.data) setQuotes(quotesRes.data);
     if (memberRes.data) {
@@ -114,10 +114,12 @@ export default function BookDetailPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    await supabase.from("user_books").delete().eq("id", userBook.id);
+    await supabase.from("user_books").delete().eq("user_id", user.id).eq("book_id", bookId);
     await supabase.from("logs").delete().eq("user_id", user.id).eq("book_id", bookId);
     await supabase.from("quotes").delete().eq("user_id", user.id).eq("book_id", bookId);
-    loadData();
+    setUserBook(null);
+    setLogs([]);
+    setQuotes([]);
   }
 
   if (loading) return <Loading />;

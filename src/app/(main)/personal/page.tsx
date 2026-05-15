@@ -88,7 +88,14 @@ export default function PersonalPage() {
 
     if (profileRes.data) setProfile(profileRes.data);
     if (favouritesRes.data) setFavourites(favouritesRes.data);
-    if (shelfRes.data) setShelfBooks(shelfRes.data);
+    if (shelfRes.data) {
+      const seen = new Set<string>();
+      setShelfBooks(shelfRes.data.filter((ub) => {
+        if (seen.has(ub.book_id)) return false;
+        seen.add(ub.book_id);
+        return true;
+      }));
+    }
     if (logsRes.data) setLogs(logsRes.data);
     if (quotesRes.data) setQuotes(quotesRes.data);
     if (memberRes.data) setClubId(memberRes.data.club_id);

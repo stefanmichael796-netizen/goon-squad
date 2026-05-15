@@ -9,16 +9,30 @@ import { Loading } from "@/components/ui/loading";
 import { LogBookSheet } from "@/components/shared/log-book-sheet";
 import { Fab } from "@/components/shared/fab";
 import { timeAgo } from "@/lib/utils";
-import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen } from "lucide-react";
+import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import type { Club, ClubMember, ClubBook, Log, Profile, GoogleBooksVolume } from "@/lib/types";
+
+interface MemberRating {
+  user_id: string;
+  display_name: string;
+  rating: number | null;
+  review: string | null;
+}
+
+interface BookWithRatings {
+  clubBook: ClubBook;
+  memberRatings: MemberRating[];
+  avgRating: number | null;
+}
 
 export default function ClubPage() {
   const [club, setClub] = useState<Club | null>(null);
   const [members, setMembers] = useState<(ClubMember & { profile: Profile })[]>([]);
   const [currentBook, setCurrentBook] = useState<ClubBook | null>(null);
-  const [pastBooks, setPastBooks] = useState<ClubBook[]>([]);
-  const [logs, setLogs] = useState<Log[]>([]);
+  const [pastBooksWithRatings, setPastBooksWithRatings] = useState<BookWithRatings[]>([]);
+  const [currentBookRatings, setCurrentBookRatings] = useState<MemberRating[]>([]);
+  const [currentAvgRating, setCurrentAvgRating] = useState<number | null>(null);
   const [memberProgress, setMemberProgress] = useState<Record<string, number>>({});
   const [logSheetOpen, setLogSheetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -57,7 +71,7 @@ export default function ClubPage() {
 
     const clubId = membership.club_id;
 
-    const [clubRes, membersRes, currentBookRes, pastBooksRes, logsRes] = await Promise.all([
+    const [clubRes, membersRes, currentBookRes, pastBooksRes, ratingsRes] = await Promise.all([
       supabase.from("clubs").select("*").eq("id", clubId).single(),
       supabase
         .from("club_members")
@@ -77,22 +91,32 @@ export default function ClubPage() {
         .order("ended_on", { ascending: false }),
       supabase
         .from("logs")
-        .select("*, book:books(*), profile:profiles(*)")
+        .select("*, profile:profiles(*)")
         .eq("club_id", clubId)
-        .order("created_at", { ascending: false })
-        .limit(30),
+        .in("kind", ["review", "reread"])
+        .not("rating", "is", null),
     ]);
 
     if (clubRes.data) setClub(clubRes.data);
-    if (membersRes.data) setMembers(membersRes.data as any);
+    const memberList = (membersRes.data || []) as any[];
+    setMembers(memberList);
+
+    const allRatings = (ratingsRes.data || []) as any[];
+
     if (currentBookRes.data) {
-      setCurrentBook(currentBookRes.data as any);
-      const memberIds = (membersRes.data || []).map((m: any) => m.user_id);
-      if (memberIds.length > 0 && currentBookRes.data.book_id) {
+      const cb = currentBookRes.data as any;
+      setCurrentBook(cb);
+
+      const bookRatings = buildMemberRatings(allRatings, cb.book_id, memberList);
+      setCurrentBookRatings(bookRatings.memberRatings);
+      setCurrentAvgRating(bookRatings.avgRating);
+
+      const memberIds = memberList.map((m: any) => m.user_id);
+      if (memberIds.length > 0 && cb.book_id) {
         const { data: progData } = await supabase
           .from("user_books")
           .select("user_id, progress_pct")
-          .eq("book_id", currentBookRes.data.book_id)
+          .eq("book_id", cb.book_id)
           .in("user_id", memberIds);
 
         const progress: Record<string, number> = {};
@@ -102,11 +126,42 @@ export default function ClubPage() {
         setMemberProgress(progress);
       }
     }
-    if (pastBooksRes.data) setPastBooks(pastBooksRes.data as any);
-    if (logsRes.data) setLogs(logsRes.data as any);
+
+    if (pastBooksRes.data) {
+      const booksWithRatings = (pastBooksRes.data as any[]).map((cb) => ({
+        clubBook: cb,
+        ...buildMemberRatings(allRatings, cb.book_id, memberList),
+      }));
+      setPastBooksWithRatings(booksWithRatings);
+    }
 
     setLoading(false);
   }, [supabase]);
+
+  function buildMemberRatings(
+    allRatings: any[],
+    bookId: string,
+    memberList: any[]
+  ): { memberRatings: MemberRating[]; avgRating: number | null } {
+    const bookRatings = allRatings.filter((r) => r.book_id === bookId);
+
+    const memberRatings: MemberRating[] = memberList.map((m: any) => {
+      const log = bookRatings.find((r) => r.user_id === m.user_id);
+      return {
+        user_id: m.user_id,
+        display_name: (m.profile as any)?.display_name || "?",
+        rating: log?.rating || null,
+        review: log?.review || null,
+      };
+    });
+
+    const rated = memberRatings.filter((r) => r.rating !== null);
+    const avg = rated.length > 0
+      ? Math.round((rated.reduce((s, r) => s + r.rating!, 0) / rated.length) * 10) / 10
+      : null;
+
+    return { memberRatings, avgRating: avg };
+  }
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -241,7 +296,7 @@ export default function ClubPage() {
                   onChange={(e) => setClubName(e.target.value)}
                   required
                   placeholder="The Slow Readers"
-                  className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
+                  className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/30"
                 />
               </div>
               <div>
@@ -254,7 +309,7 @@ export default function ClubPage() {
                   onChange={(e) => setClubDescription(e.target.value)}
                   placeholder="Optional"
                   rows={2}
-                  className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50 resize-none"
+                  className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/30 resize-none"
                 />
               </div>
             </>
@@ -271,7 +326,7 @@ export default function ClubPage() {
                 required
                 placeholder="ABC123"
                 maxLength={6}
-                className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50 uppercase tracking-widest text-center text-lg"
+                className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/30 uppercase tracking-widest text-center text-lg"
               />
               <p className="text-xs text-[var(--muted)] mt-1">
                 Ask your club owner for the 6-character code
@@ -298,214 +353,213 @@ export default function ClubPage() {
   }
 
   return (
-    <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-8">
+    <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6">
       {/* Club header */}
-      <div>
-        <h1 className="font-serif font-bold text-2xl text-[var(--foreground)]">
-          {club.name}
-        </h1>
-        {club.description && (
-          <p className="text-sm text-[var(--muted)] mt-1">{club.description}</p>
-        )}
-        <div className="flex items-center gap-3 mt-2">
-          <span className="text-sm text-[var(--muted)]">
-            {members.length} {members.length === 1 ? "member" : "members"}
-          </span>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="font-serif font-bold text-2xl text-[var(--foreground)]">
+            {club.name}
+          </h1>
+          {club.description && (
+            <p className="text-sm text-[var(--muted)] mt-0.5">{club.description}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {members.slice(0, 4).map((m) => (
+            <div
+              key={m.user_id}
+              className="w-8 h-8 rounded-full bg-coral/15 flex items-center justify-center text-xs font-bold text-coral -ml-1 first:ml-0 border-2 border-[var(--background)]"
+              title={(m.profile as any)?.display_name}
+            >
+              {(m.profile as any)?.display_name?.[0]?.toUpperCase() || "?"}
+            </div>
+          ))}
+          {members.length > 4 && (
+            <div className="w-8 h-8 rounded-full bg-[var(--border)] flex items-center justify-center text-xs font-medium text-[var(--muted)] -ml-1 border-2 border-[var(--background)]">
+              +{members.length - 4}
+            </div>
+          )}
         </div>
       </div>
 
-
       {/* Current read */}
       {currentBook?.book && (
-        <section className="p-4 rounded-xl bg-[var(--surface)] space-y-4">
-          <h2 className="font-serif font-semibold text-sm text-[var(--muted)] uppercase tracking-wide">
-            Currently reading
-          </h2>
-          <div className="flex gap-3">
-            <Link href={`/book/${currentBook.book_id}`}>
-              <BookCover
-                coverUrl={(currentBook.book as any).cover_url}
-                title={(currentBook.book as any).title}
-                size="lg"
-              />
-            </Link>
-            <div className="flex-1 min-w-0">
-              <Link href={`/book/${currentBook.book_id}`}>
-                <h3 className="font-serif font-semibold text-lg text-[var(--foreground)]">
-                  {(currentBook.book as any).title}
-                </h3>
-              </Link>
-              <p className="text-sm text-[var(--muted)]">
-                {(currentBook.book as any).authors?.join(", ")}
-              </p>
-              {currentBook.target_end_date && (
-                <p className="text-xs text-[var(--muted)] mt-1">
-                  Target: {new Date(currentBook.target_end_date).toLocaleDateString()}
-                </p>
-              )}
-            </div>
+        <section className="rounded-xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+              Currently reading
+            </h2>
+            <button
+              onClick={() => setPickBookOpen(true)}
+              className="text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              Change
+            </button>
           </div>
 
-          {/* Member progress */}
-          <div className="space-y-2">
-            {members.map((m) => {
-              const pct = memberProgress[m.user_id] || 0;
-              return (
-                <div key={m.user_id} className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-coral/20 flex items-center justify-center text-xs font-bold text-coral flex-shrink-0">
-                    {(m.profile as any)?.display_name?.[0]?.toUpperCase() || "?"}
+          <div className="p-4">
+            <div className="flex gap-4">
+              <Link href={`/book/${currentBook.book_id}`}>
+                <BookCover
+                  coverUrl={(currentBook.book as any).cover_url}
+                  title={(currentBook.book as any).title}
+                  size="lg"
+                />
+              </Link>
+              <div className="flex-1 min-w-0">
+                <Link href={`/book/${currentBook.book_id}`}>
+                  <h3 className="font-serif font-semibold text-lg text-[var(--foreground)] leading-tight">
+                    {(currentBook.book as any).title}
+                  </h3>
+                </Link>
+                <p className="text-sm text-[var(--muted)]">
+                  {(currentBook.book as any).authors?.join(", ")}
+                </p>
+                {currentAvgRating !== null && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-2xl font-bold text-[var(--foreground)]">{currentAvgRating}</span>
+                    <StarRating rating={currentAvgRating} size="sm" readonly />
+                    <span className="text-xs text-[var(--muted)]">avg</span>
                   </div>
-                  <div className="flex-1">
-                    <div className="h-1.5 rounded-full bg-[var(--border)]">
+                )}
+              </div>
+            </div>
+
+            {/* Ratings table */}
+            {currentBookRatings.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {currentBookRatings.map((mr) => (
+                  <div key={mr.user_id} className="flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-full bg-coral/15 flex items-center justify-center text-xs font-bold text-coral flex-shrink-0">
+                      {mr.display_name[0]?.toUpperCase() || "?"}
+                    </div>
+                    <span className="text-sm text-[var(--foreground)] w-20 truncate">{mr.display_name}</span>
+                    <div className="flex-1">
+                      {mr.rating ? (
+                        <div className="flex items-center gap-2">
+                          <StarRating rating={mr.rating} size="sm" readonly />
+                          <span className="text-sm font-medium text-[var(--foreground)]">{mr.rating}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[var(--muted)] italic">not rated</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Member progress */}
+            <div className="mt-4 pt-4 border-t border-[var(--border)] space-y-2">
+              <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">Progress</p>
+              {members.map((m) => {
+                const pct = memberProgress[m.user_id] || 0;
+                return (
+                  <div key={m.user_id} className="flex items-center gap-2">
+                    <span className="text-xs text-[var(--muted)] w-20 truncate">
+                      {(m.profile as any)?.display_name}
+                    </span>
+                    <div className="flex-1 h-2 rounded-full bg-[var(--border)]">
                       <div
                         className="h-full rounded-full bg-coral transition-all"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
+                    <span className="text-xs text-[var(--muted)] w-8 text-right">
+                      {Math.round(pct)}%
+                    </span>
                   </div>
-                  <span className="text-xs text-[var(--muted)] w-8 text-right">
-                    {Math.round(pct)}%
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
 
-          <div className="flex gap-3">
             <Link
               href={`/club/discussion/${currentBook.id}`}
-              className="text-sm text-coral hover:underline"
+              className="mt-4 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-coral text-white text-sm font-medium transition-opacity hover:opacity-90"
             >
-              Open discussion
+              <MessageCircle className="w-4 h-4" /> Discussion
             </Link>
-            <button
-              onClick={() => setPickBookOpen(true)}
-              className="text-sm text-[var(--muted)] hover:text-[var(--foreground)]"
-            >
-              Change book
-            </button>
           </div>
         </section>
       )}
 
       {!currentBook && (
-        <section className="p-4 rounded-xl bg-[var(--surface)] space-y-3 text-center">
+        <section className="p-6 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-center space-y-3">
           <p className="text-[var(--muted)]">No book picked yet.</p>
           <button
             onClick={() => setPickBookOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-coral text-white text-sm font-medium transition-opacity hover:opacity-90"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-coral text-white text-sm font-medium transition-opacity hover:opacity-90"
           >
             <BookOpen className="w-4 h-4" /> Pick a book
           </button>
         </section>
       )}
 
-      {/* Activity feed */}
-      <section>
-        <h2 className="font-serif font-semibold text-lg text-[var(--foreground)] mb-3">
-          Activity
-        </h2>
-        {logs.length === 0 ? (
-          <EmptyState message="Quiet in here. Log something." />
-        ) : (
-          <div className="space-y-3">
-            {logs.map((log) => (
-              <div key={log.id} className="flex gap-3 p-3 rounded-lg bg-[var(--surface)]">
-                <Link href={`/book/${log.book_id}`}>
-                  <BookCover
-                    coverUrl={(log.book as any)?.cover_url}
-                    title={(log.book as any)?.title || ""}
-                    size="sm"
-                  />
-                </Link>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-[var(--muted)]">
-                    <span className="text-[var(--foreground)] font-medium">
-                      {(log.profile as any)?.display_name}
-                    </span>
-                    {" "}
-                    {log.kind === "review"
-                      ? "reviewed"
-                      : log.kind === "shelf_change"
-                      ? "shelved"
-                      : log.kind === "progress"
-                      ? "updated progress on"
-                      : log.kind === "reread"
-                      ? "re-read"
-                      : "favourited"}
-                  </p>
-                  <p className="font-serif font-medium text-[var(--foreground)] truncate">
-                    {(log.book as any)?.title}
-                  </p>
-                  {log.rating && <StarRating rating={log.rating} size="sm" readonly />}
-                  {log.review && (
-                    <p className="text-sm font-serif text-[var(--foreground)] mt-1 line-clamp-2">
-                      {log.review}
-                    </p>
-                  )}
-                  <p className="text-xs text-[var(--muted)] mt-1">{timeAgo(log.created_at)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Members */}
-      <section>
-        <h2 className="font-serif font-semibold text-lg text-[var(--foreground)] mb-3">
-          Members
-        </h2>
-        <div className="flex flex-wrap gap-3">
-          {members.map((m) => (
-            <Link
-              key={m.user_id}
-              href={`/club/member/${m.user_id}`}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--surface)] hover:bg-[var(--border)] transition-colors"
-            >
-              <div className="w-8 h-8 rounded-full bg-coral/20 flex items-center justify-center text-sm font-bold text-coral">
-                {(m.profile as any)?.display_name?.[0]?.toUpperCase() || "?"}
-              </div>
-              <span className="text-sm text-[var(--foreground)]">
-                {(m.profile as any)?.display_name}
-              </span>
-              {m.role === "owner" && (
-                <span className="text-xs text-ochre">owner</span>
-              )}
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {/* Past picks */}
-      {pastBooks.length > 0 && (
+      {/* Past picks — bookshelf with ratings */}
+      {pastBooksWithRatings.length > 0 && (
         <section>
-          <h2 className="font-serif font-semibold text-lg text-[var(--foreground)] mb-3">
-            Past picks
+          <h2 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-3">
+            The shelf
           </h2>
-          <div className="space-y-3">
-            {pastBooks.map((cb) => (
-              <Link
-                key={cb.id}
-                href={`/club/discussion/${cb.id}`}
-                className="flex gap-3 p-3 rounded-lg bg-[var(--surface)] hover:bg-[var(--border)] transition-colors"
-              >
-                <BookCover
-                  coverUrl={(cb.book as any)?.cover_url}
-                  title={(cb.book as any)?.title || ""}
-                  size="sm"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-serif font-medium text-[var(--foreground)] truncate">
-                    {(cb.book as any)?.title}
-                  </p>
-                  <p className="text-sm text-[var(--muted)]">
-                    {(cb.book as any)?.authors?.join(", ")}
-                  </p>
+
+          {/* Bookshelf display */}
+          <div className="space-y-0">
+            {pastBooksWithRatings.map((item) => {
+              const book = item.clubBook.book as any;
+              return (
+                <div key={item.clubBook.id} className="border border-[var(--border)] rounded-xl bg-[var(--surface)] overflow-hidden mb-3">
+                  <div className="flex gap-3 p-3">
+                    <Link href={`/book/${item.clubBook.book_id}`}>
+                      <BookCover
+                        coverUrl={book?.cover_url}
+                        title={book?.title || ""}
+                        size="md"
+                      />
+                    </Link>
+                    <div className="flex-1 min-w-0">
+                      <Link href={`/book/${item.clubBook.book_id}`}>
+                        <p className="font-serif font-semibold text-[var(--foreground)] truncate">
+                          {book?.title}
+                        </p>
+                      </Link>
+                      <p className="text-xs text-[var(--muted)]">
+                        {book?.authors?.join(", ")}
+                      </p>
+                      {item.avgRating !== null && (
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <span className="text-lg font-bold text-[var(--foreground)]">{item.avgRating}</span>
+                          <StarRating rating={item.avgRating} size="sm" readonly />
+                        </div>
+                      )}
+                    </div>
+                    <Link
+                      href={`/club/discussion/${item.clubBook.id}`}
+                      className="self-center p-2 text-[var(--muted)] hover:text-coral transition-colors"
+                    >
+                      <MessageCircle className="w-5 h-5" />
+                    </Link>
+                  </div>
+
+                  {/* Individual ratings row */}
+                  <div className="px-3 pb-3 flex flex-wrap gap-x-4 gap-y-1">
+                    {item.memberRatings.map((mr) => (
+                      <div key={mr.user_id} className="flex items-center gap-1.5">
+                        <span className="text-xs text-[var(--muted)]">{mr.display_name.split(" ")[0]}</span>
+                        {mr.rating ? (
+                          <span className="text-xs font-semibold text-[var(--foreground)]">{mr.rating}</span>
+                        ) : (
+                          <span className="text-xs text-[var(--border)]">—</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </Link>
-            ))}
+              );
+            })}
           </div>
+
+          {/* Shelf edge decoration */}
+          <div className="h-3 rounded-b-lg bg-gradient-to-b from-[var(--border)] to-transparent" />
         </section>
       )}
 
@@ -577,7 +631,7 @@ export default function ClubPage() {
                   onChange={(e) => handlePickSearch(e.target.value)}
                   placeholder="Search by title or author"
                   autoFocus
-                  className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/30"
                 />
                 {pickSearching && (
                   <Loader2 className="absolute right-3 top-3 w-4 h-4 text-[var(--muted)] animate-spin" />

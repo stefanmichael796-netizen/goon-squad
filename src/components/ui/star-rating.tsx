@@ -57,12 +57,12 @@ export function StarRating({ rating, onChange, size = "md", readonly = false }: 
                 onClick={() => handleStarClick(star, false)}
               />
               {filled ? (
-                <span className={cn("text-coral transition-colors", !readonly && "hover:scale-110 active:scale-95")}>★</span>
+                <span className={cn("text-ochre transition-colors", !readonly && "hover:scale-110 active:scale-95")}>★</span>
               ) : partialFill ? (
                 <span className="relative">
                   <span className="text-[var(--border)]">☆</span>
                   <span
-                    className="absolute inset-0 overflow-hidden text-coral"
+                    className="absolute inset-0 overflow-hidden text-ochre"
                     style={{ width: `${fillPct}%` }}
                   >★</span>
                 </span>

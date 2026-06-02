@@ -45,6 +45,7 @@ export default function ClubPage() {
   const [selectedBook, setSelectedBook] = useState<BookWithRatings | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [clubAction, setClubAction] = useState<"create" | "join">("create");
@@ -204,6 +205,7 @@ export default function ClubPage() {
     if (!file || !club) return;
 
     setUploadingLogo(true);
+    setLogoError(null);
     const ext = file.name.split(".").pop() || "jpg";
     const path = `${club.id}/${Date.now()}.${ext}`;
 
@@ -211,11 +213,25 @@ export default function ClubPage() {
       .from("club-logos")
       .upload(path, file, { upsert: true, contentType: file.type });
 
-    if (!uploadError) {
-      const { data } = supabase.storage.from("club-logos").getPublicUrl(path);
-      await supabase.from("clubs").update({ logo_url: data.publicUrl }).eq("id", club.id);
-      setClub({ ...club, logo_url: data.publicUrl });
+    if (uploadError) {
+      setLogoError(`Upload failed: ${uploadError.message}`);
+      setUploadingLogo(false);
+      return;
     }
+
+    const { data } = supabase.storage.from("club-logos").getPublicUrl(path);
+    const { error: updateError } = await supabase
+      .from("clubs")
+      .update({ logo_url: data.publicUrl })
+      .eq("id", club.id);
+
+    if (updateError) {
+      setLogoError(`Couldn't save photo: ${updateError.message}`);
+      setUploadingLogo(false);
+      return;
+    }
+
+    setClub({ ...club, logo_url: data.publicUrl });
     setUploadingLogo(false);
   }
 
@@ -475,6 +491,8 @@ export default function ClubPage() {
           )}
         </div>
       </div>
+
+      {logoError && <p className="text-xs text-red-500 -mt-3">{logoError}</p>}
 
       {/* Inline pick-book search — expands in normal flow so it stays visible */}
       {pickBookOpen && (

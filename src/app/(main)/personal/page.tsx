@@ -7,6 +7,7 @@ import { StarRating } from "@/components/ui/star-rating";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Loading } from "@/components/ui/loading";
 import { LogBookSheet } from "@/components/shared/log-book-sheet";
+import { PersonalBookSheet } from "@/components/shared/personal-book-sheet";
 import { timeAgo } from "@/lib/utils";
 import { BarChart3, LogOut, ChevronLeft, ChevronRight, Search, Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -31,6 +32,8 @@ export default function PersonalPage() {
   const [searching, setSearching] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [selectedVolume, setSelectedVolume] = useState<GoogleBooksVolume | null>(null);
+  const [selectedShelfBook, setSelectedShelfBook] = useState<UserBook | null>(null);
+  const [bookRatings, setBookRatings] = useState<Record<string, { rating: number | null; review: string | null }>>({});
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const supabase = createClient();
   const router = useRouter();
@@ -47,6 +50,7 @@ export default function PersonalPage() {
       quotesRes,
       memberRes,
       statsRes,
+      ratingsRes,
     ] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user.id).single(),
       supabase
@@ -84,6 +88,12 @@ export default function PersonalPage() {
         .select("*, book:books(*)")
         .eq("user_id", user.id)
         .eq("shelf", "read"),
+      supabase
+        .from("logs")
+        .select("book_id, rating, review")
+        .eq("user_id", user.id)
+        .in("kind", ["review", "reread"])
+        .not("rating", "is", null),
     ]);
 
     if (profileRes.data) setProfile(profileRes.data);
@@ -119,6 +129,16 @@ export default function PersonalPage() {
         totalBooks: readBooks.length,
         topAuthor,
       });
+    }
+
+    if (ratingsRes.data) {
+      const rMap: Record<string, { rating: number | null; review: string | null }> = {};
+      ratingsRes.data.forEach((r: any) => {
+        if (!rMap[r.book_id] || (r.rating && (!rMap[r.book_id].rating || r.rating > rMap[r.book_id].rating!))) {
+          rMap[r.book_id] = { rating: r.rating, review: r.review };
+        }
+      });
+      setBookRatings(rMap);
     }
 
     setLoading(false);
@@ -384,62 +404,36 @@ export default function PersonalPage() {
             }
           />
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
             {shelfBooks.map((ub) => {
               const book = ub.book as any;
+              const myRating = bookRatings[ub.book_id]?.rating;
               return (
-                <div key={ub.id} className="flex gap-3 p-3 rounded-lg bg-[var(--surface)]">
-                  <Link href={`/book/${ub.book_id}`}>
-                    <BookCover coverUrl={book?.cover_url} title={book?.title || ""} size="sm" />
-                  </Link>
-                  <div className="flex-1 min-w-0">
-                    <Link href={`/book/${ub.book_id}`}>
-                      <p className="font-serif font-medium text-[var(--foreground)] truncate">
-                        {book?.title}
-                      </p>
-                    </Link>
-                    <p className="text-sm text-[var(--muted)]">
-                      {book?.authors?.join(", ")}
-                    </p>
-
-                    {shelfTab === "reading" && (
-                      <div className="mt-2 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-1.5 rounded-full bg-[var(--border)]">
-                            <div
-                              className="h-full rounded-full bg-coral transition-all"
-                              style={{ width: `${ub.progress_pct || 0}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-[var(--muted)]">
-                            {ub.progress_page ? `p.${ub.progress_page}` : `${Math.round(ub.progress_pct || 0)}%`}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min={0}
-                          max={book?.page_count || 100}
-                          value={ub.progress_page || 0}
-                          onChange={(e) =>
-                            updateProgress(ub.id, parseInt(e.target.value), book?.page_count)
-                          }
-                          className="w-full h-2 accent-coral"
-                        />
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-2 mt-1">
-                      <button
-                        onClick={() => toggleFavourite(ub.id, ub.is_favourite)}
-                        className={`text-xs ${
-                          ub.is_favourite ? "text-ochre" : "text-[var(--muted)]"
-                        } hover:text-ochre transition-colors`}
-                      >
-                        {ub.is_favourite ? "★ Favourite" : "☆ Add to favourites"}
-                      </button>
-                    </div>
+                <button
+                  key={ub.id}
+                  onClick={() => setSelectedShelfBook(ub)}
+                  className="flex flex-col items-center gap-1.5 group"
+                >
+                  <div className="w-full transition-transform group-hover:-translate-y-0.5">
+                    <BookCover
+                      coverUrl={book?.cover_url}
+                      title={book?.title || ""}
+                      size="lg"
+                      className="w-full h-auto aspect-[2/3]"
+                    />
                   </div>
-                </div>
+                  {shelfTab === "read" && myRating !== null && myRating !== undefined ? (
+                    <span className="text-sm font-bold text-[var(--foreground)]">
+                      {myRating}
+                    </span>
+                  ) : shelfTab === "reading" ? (
+                    <span className="text-xs text-[var(--muted)]">
+                      {Math.round(ub.progress_pct || 0)}%
+                    </span>
+                  ) : (
+                    <span className="text-xs text-[var(--muted)]">—</span>
+                  )}
+                </button>
               );
             })}
           </div>
@@ -530,6 +524,27 @@ export default function PersonalPage() {
         clubId={clubId}
         preSelectedVolume={selectedVolume}
       />
+
+      {selectedShelfBook && (
+        <PersonalBookSheet
+          open={!!selectedShelfBook}
+          onClose={() => setSelectedShelfBook(null)}
+          userBookId={selectedShelfBook.id}
+          bookId={selectedShelfBook.book_id}
+          bookTitle={(selectedShelfBook.book as any)?.title || ""}
+          bookAuthors={(selectedShelfBook.book as any)?.authors || null}
+          coverUrl={(selectedShelfBook.book as any)?.cover_url || null}
+          description={(selectedShelfBook.book as any)?.description || null}
+          rating={bookRatings[selectedShelfBook.book_id]?.rating || null}
+          review={bookRatings[selectedShelfBook.book_id]?.review || null}
+          shelf={selectedShelfBook.shelf}
+          progressPct={selectedShelfBook.progress_pct}
+          progressPage={selectedShelfBook.progress_page}
+          pageCount={(selectedShelfBook.book as any)?.page_count || null}
+          isFavourite={selectedShelfBook.is_favourite}
+          onUpdate={() => { setSelectedShelfBook(null); loadData(); }}
+        />
+      )}
     </div>
   );
 }

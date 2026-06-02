@@ -98,7 +98,7 @@ export async function POST(request: Request) {
     }
   }
 
-  let resolvedClubId = shareToClub && clubId ? clubId : null;
+  const resolvedClubId = shareToClub && clubId ? clubId : null;
   let clubBookId: string | null = null;
 
   if (resolvedClubId) {
@@ -107,9 +107,25 @@ export async function POST(request: Request) {
       .select("id")
       .eq("club_id", resolvedClubId)
       .eq("book_id", bookId)
-      .single();
+      .maybeSingle();
 
-    clubBookId = clubBook?.id || null;
+    if (clubBook) {
+      clubBookId = clubBook.id;
+    } else if (shelf === "read") {
+      // A finished book shared to the club joins the club shelf as a past read.
+      const { data: newClubBook } = await supabase
+        .from("club_books")
+        .insert({
+          club_id: resolvedClubId,
+          book_id: bookId,
+          status: "past",
+          ended_on: finishedDate || today,
+        })
+        .select("id")
+        .single();
+
+      clubBookId = newClubBook?.id || null;
+    }
   }
 
   const kind = isReread ? "reread" : (review || rating) ? "review" : "shelf_change";

@@ -680,6 +680,7 @@ export default function ClubPage() {
         coverUrl={(selectedBook?.clubBook.book as any)?.cover_url || null}
         description={(selectedBook?.clubBook.book as any)?.description || null}
         characters={selectedBook?.clubBook.characters || null}
+        endedOn={selectedBook?.clubBook.ended_on || null}
         avgRating={selectedBook?.avgRating || null}
         memberRatings={selectedBook?.memberRatings || []}
         clubId={club.id}

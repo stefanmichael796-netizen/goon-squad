@@ -33,6 +33,7 @@ interface ClubBookSheetProps {
   coverUrl: string | null;
   description: string | null;
   characters: string | null;
+  endedOn: string | null;
   avgRating: number | null;
   memberRatings: MemberRating[];
   clubId: string;
@@ -49,6 +50,7 @@ export function ClubBookSheet({
   coverUrl,
   description,
   characters,
+  endedOn,
   avgRating,
   memberRatings,
   clubId,
@@ -58,6 +60,8 @@ export function ClubBookSheet({
   const [charactersText, setCharactersText] = useState("");
   const [editingChars, setEditingChars] = useState(false);
   const [savingChars, setSavingChars] = useState(false);
+  const [dateRead, setDateRead] = useState("");
+  const [savingDate, setSavingDate] = useState(false);
   const [newQuote, setNewQuote] = useState("");
   const [newQuotePage, setNewQuotePage] = useState("");
   const [addingQuote, setAddingQuote] = useState(false);
@@ -91,13 +95,26 @@ export function ClubBookSheet({
   useEffect(() => {
     if (open) {
       setCharactersText(characters || "");
+      setDateRead(endedOn || "");
       setEditingChars(false);
       setAddingQuote(false);
       setNewQuote("");
       setNewQuotePage("");
       loadQuotes();
     }
-  }, [open, characters, loadQuotes]);
+  }, [open, characters, endedOn, loadQuotes]);
+
+  async function saveDateRead(value: string) {
+    if (!clubBookId) return;
+    setDateRead(value);
+    setSavingDate(true);
+    await supabase
+      .from("club_books")
+      .update({ ended_on: value || null })
+      .eq("id", clubBookId);
+    setSavingDate(false);
+    onUpdate();
+  }
 
   async function saveCharacters() {
     if (!clubBookId) return;
@@ -189,6 +206,23 @@ export function ClubBookSheet({
               )}
             </div>
           </div>
+
+          {/* Date read */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                Date read
+              </h4>
+              {savingDate && <span className="text-xs text-[var(--muted)]">Saving…</span>}
+            </div>
+            <input
+              type="date"
+              value={dateRead}
+              max={new Date().toISOString().split("T")[0]}
+              onChange={(e) => saveDateRead(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-coral/30"
+            />
+          </section>
 
           {/* Individual scores */}
           {memberRatings.length > 0 && (

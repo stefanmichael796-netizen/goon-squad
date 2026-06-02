@@ -7,11 +7,11 @@ import { StarRating } from "@/components/ui/star-rating";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Loading } from "@/components/ui/loading";
 import { LogBookSheet } from "@/components/shared/log-book-sheet";
+import { ClubBookSheet } from "@/components/shared/club-book-sheet";
 import { Fab } from "@/components/shared/fab";
-import { timeAgo } from "@/lib/utils";
 import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle } from "lucide-react";
 import Link from "next/link";
-import type { Club, ClubMember, ClubBook, Log, Profile, GoogleBooksVolume } from "@/lib/types";
+import type { Club, ClubMember, ClubBook, Profile, GoogleBooksVolume } from "@/lib/types";
 
 interface MemberRating {
   user_id: string;
@@ -21,7 +21,7 @@ interface MemberRating {
 }
 
 interface BookWithRatings {
-  clubBook: ClubBook;
+  clubBook: ClubBook & { characters?: string | null };
   memberRatings: MemberRating[];
   avgRating: number | null;
 }
@@ -43,6 +43,7 @@ export default function ClubPage() {
   const [pickResults, setPickResults] = useState<GoogleBooksVolume[]>([]);
   const [pickSearching, setPickSearching] = useState(false);
   const [pickSaving, setPickSaving] = useState(false);
+  const [selectedBook, setSelectedBook] = useState<BookWithRatings | null>(null);
 
   const [clubAction, setClubAction] = useState<"create" | "join">("create");
   const [clubName, setClubName] = useState("");
@@ -495,71 +496,41 @@ export default function ClubPage() {
         </section>
       )}
 
-      {/* Past picks — bookshelf with ratings */}
+      {/* Past picks — 3-column cover grid */}
       {pastBooksWithRatings.length > 0 && (
         <section>
           <h2 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-3">
             The shelf
           </h2>
 
-          {/* Bookshelf display */}
-          <div className="space-y-0">
+          <div className="grid grid-cols-3 gap-3">
             {pastBooksWithRatings.map((item) => {
               const book = item.clubBook.book as any;
               return (
-                <div key={item.clubBook.id} className="border border-[var(--border)] rounded-xl bg-[var(--surface)] overflow-hidden mb-3">
-                  <div className="flex gap-3 p-3">
-                    <Link href={`/book/${item.clubBook.book_id}`}>
-                      <BookCover
-                        coverUrl={book?.cover_url}
-                        title={book?.title || ""}
-                        size="md"
-                      />
-                    </Link>
-                    <div className="flex-1 min-w-0">
-                      <Link href={`/book/${item.clubBook.book_id}`}>
-                        <p className="font-serif font-semibold text-[var(--foreground)] truncate">
-                          {book?.title}
-                        </p>
-                      </Link>
-                      <p className="text-xs text-[var(--muted)]">
-                        {book?.authors?.join(", ")}
-                      </p>
-                      {item.avgRating !== null && (
-                        <div className="flex items-center gap-1.5 mt-1.5">
-                          <span className="text-lg font-bold text-[var(--foreground)]">{item.avgRating}</span>
-                          <StarRating rating={item.avgRating} size="sm" readonly />
-                        </div>
-                      )}
-                    </div>
-                    <Link
-                      href={`/club/discussion/${item.clubBook.id}`}
-                      className="self-center p-2 text-[var(--muted)] hover:text-coral transition-colors"
-                    >
-                      <MessageCircle className="w-5 h-5" />
-                    </Link>
+                <button
+                  key={item.clubBook.id}
+                  onClick={() => setSelectedBook(item)}
+                  className="flex flex-col items-center gap-1.5 group"
+                >
+                  <div className="w-full transition-transform group-hover:-translate-y-0.5">
+                    <BookCover
+                      coverUrl={book?.cover_url}
+                      title={book?.title || ""}
+                      size="lg"
+                      className="w-full h-auto aspect-[2/3]"
+                    />
                   </div>
-
-                  {/* Individual ratings row */}
-                  <div className="px-3 pb-3 flex flex-wrap gap-x-4 gap-y-1">
-                    {item.memberRatings.map((mr) => (
-                      <div key={mr.user_id} className="flex items-center gap-1.5">
-                        <span className="text-xs text-[var(--muted)]">{mr.display_name.split(" ")[0]}</span>
-                        {mr.rating ? (
-                          <span className="text-xs font-semibold text-[var(--foreground)]">{mr.rating}</span>
-                        ) : (
-                          <span className="text-xs text-[var(--border)]">—</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                  {item.avgRating !== null ? (
+                    <span className="text-sm font-bold text-[var(--foreground)]">
+                      {item.avgRating}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-[var(--muted)]">—</span>
+                  )}
+                </button>
               );
             })}
           </div>
-
-          {/* Shelf edge decoration */}
-          <div className="h-3 rounded-b-lg bg-gradient-to-b from-[var(--border)] to-transparent" />
         </section>
       )}
 
@@ -672,6 +643,23 @@ export default function ClubPage() {
         onSuccess={loadData}
         clubId={club.id}
       />
+
+      <ClubBookSheet
+        open={!!selectedBook}
+        onClose={() => setSelectedBook(null)}
+        clubBookId={selectedBook?.clubBook.id || null}
+        bookId={selectedBook?.clubBook.book_id || null}
+        bookTitle={(selectedBook?.clubBook.book as any)?.title || ""}
+        bookAuthors={(selectedBook?.clubBook.book as any)?.authors || null}
+        coverUrl={(selectedBook?.clubBook.book as any)?.cover_url || null}
+        description={(selectedBook?.clubBook.book as any)?.description || null}
+        characters={selectedBook?.clubBook.characters || null}
+        avgRating={selectedBook?.avgRating || null}
+        memberRatings={selectedBook?.memberRatings || []}
+        clubId={club.id}
+        onUpdate={loadData}
+      />
+
       <Fab onClick={() => setLogSheetOpen(true)} />
     </div>
   );

@@ -3,13 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
-import { StarRating } from "@/components/ui/star-rating";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Loading } from "@/components/ui/loading";
 import { LogBookSheet } from "@/components/shared/log-book-sheet";
 import { ClubBookSheet } from "@/components/shared/club-book-sheet";
 import { Fab } from "@/components/shared/fab";
-import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle } from "lucide-react";
+import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles } from "lucide-react";
 import Link from "next/link";
 import type { Club, ClubMember, ClubBook, Profile, GoogleBooksVolume } from "@/lib/types";
 
@@ -31,9 +29,9 @@ export default function ClubPage() {
   const [members, setMembers] = useState<(ClubMember & { profile: Profile })[]>([]);
   const [currentBook, setCurrentBook] = useState<ClubBook | null>(null);
   const [pastBooksWithRatings, setPastBooksWithRatings] = useState<BookWithRatings[]>([]);
-  const [currentBookRatings, setCurrentBookRatings] = useState<MemberRating[]>([]);
-  const [currentAvgRating, setCurrentAvgRating] = useState<number | null>(null);
-  const [memberProgress, setMemberProgress] = useState<Record<string, number>>({});
+  const [overview, setOverview] = useState<{ synopsis: string; characters: string } | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
   const [logSheetOpen, setLogSheetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -108,24 +106,16 @@ export default function ClubPage() {
       const cb = currentBookRes.data as any;
       setCurrentBook(cb);
 
-      const bookRatings = buildMemberRatings(allRatings, cb.book_id, memberList);
-      setCurrentBookRatings(bookRatings.memberRatings);
-      setCurrentAvgRating(bookRatings.avgRating);
-
-      const memberIds = memberList.map((m: any) => m.user_id);
-      if (memberIds.length > 0 && cb.book_id) {
-        const { data: progData } = await supabase
-          .from("user_books")
-          .select("user_id, progress_pct")
-          .eq("book_id", cb.book_id)
-          .in("user_id", memberIds);
-
-        const progress: Record<string, number> = {};
-        progData?.forEach((p) => {
-          progress[p.user_id] = p.progress_pct || 0;
-        });
-        setMemberProgress(progress);
+      // Show any cached AI overview immediately; don't auto-spend on generation.
+      if (cb.ai_synopsis && cb.ai_characters) {
+        setOverview({ synopsis: cb.ai_synopsis, characters: cb.ai_characters });
+      } else {
+        setOverview(null);
       }
+      setOverviewError(null);
+    } else {
+      setCurrentBook(null);
+      setOverview(null);
     }
 
     if (pastBooksRes.data) {
@@ -165,6 +155,27 @@ export default function ClubPage() {
   }
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  async function loadOverview(clubBookId: string, refresh = false) {
+    setOverviewLoading(true);
+    setOverviewError(null);
+    try {
+      const res = await fetch("/api/club/overview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clubBookId, refresh }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setOverviewError(data.error || "Couldn't generate an overview.");
+      } else {
+        setOverview({ synopsis: data.synopsis, characters: data.characters });
+      }
+    } catch {
+      setOverviewError("Network error. Try again.");
+    }
+    setOverviewLoading(false);
+  }
 
   function copyInviteCode() {
     if (!club) return;
@@ -481,63 +492,54 @@ export default function ClubPage() {
                 <p className="text-sm text-[var(--muted)]">
                   {(currentBook.book as any).authors?.join(", ")}
                 </p>
-                {currentAvgRating !== null && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-2xl font-bold text-[var(--foreground)]">{currentAvgRating}</span>
-                    <StarRating rating={currentAvgRating} size="sm" readonly />
-                    <span className="text-xs text-[var(--muted)]">avg</span>
-                  </div>
+                {(currentBook.book as any).page_count && (
+                  <p className="text-xs text-[var(--muted)] mt-1">
+                    {(currentBook.book as any).page_count} pages
+                  </p>
                 )}
               </div>
             </div>
 
-            {/* Ratings table */}
-            {currentBookRatings.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {currentBookRatings.map((mr) => (
-                  <div key={mr.user_id} className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-full bg-coral/15 flex items-center justify-center text-xs font-bold text-coral flex-shrink-0">
-                      {mr.display_name[0]?.toUpperCase() || "?"}
-                    </div>
-                    <span className="text-sm text-[var(--foreground)] w-20 truncate">{mr.display_name}</span>
-                    <div className="flex-1">
-                      {mr.rating ? (
-                        <div className="flex items-center gap-2">
-                          <StarRating rating={mr.rating} size="sm" readonly />
-                          <span className="text-sm font-medium text-[var(--foreground)]">{mr.rating}</span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-[var(--muted)] italic">not rated</span>
-                      )}
-                    </div>
+            {/* AI synopsis + spoiler-free characters */}
+            {overviewLoading ? (
+              <div className="mt-4 flex items-center gap-2 text-sm text-[var(--muted)]">
+                <Loader2 className="w-4 h-4 animate-spin" /> Writing a spoiler-free overview…
+              </div>
+            ) : overview ? (
+              <div className="mt-4 space-y-4">
+                <div>
+                  <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-1.5">
+                    Synopsis
+                  </h4>
+                  <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed">
+                    {overview.synopsis}
+                  </p>
+                </div>
+                {overview.characters && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-1.5">
+                      Who&apos;s who <span className="font-normal normal-case">(spoiler-free)</span>
+                    </h4>
+                    <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed whitespace-pre-wrap">
+                      {overview.characters}
+                    </p>
                   </div>
-                ))}
+                )}
+                <p className="text-[10px] text-[var(--muted)] italic">AI-generated · spoiler-free</p>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-2">
+                {overviewError && (
+                  <p className="text-xs text-red-500">{overviewError}</p>
+                )}
+                <button
+                  onClick={() => loadOverview(currentBook.id, true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-coral text-white text-sm font-medium transition-opacity hover:opacity-90"
+                >
+                  <Sparkles className="w-4 h-4" /> Generate spoiler-free overview
+                </button>
               </div>
             )}
-
-            {/* Member progress */}
-            <div className="mt-4 pt-4 border-t border-[var(--border)] space-y-2">
-              <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">Progress</p>
-              {members.map((m) => {
-                const pct = memberProgress[m.user_id] || 0;
-                return (
-                  <div key={m.user_id} className="flex items-center gap-2">
-                    <span className="text-xs text-[var(--muted)] w-20 truncate">
-                      {(m.profile as any)?.display_name}
-                    </span>
-                    <div className="flex-1 h-2 rounded-full bg-[var(--border)]">
-                      <div
-                        className="h-full rounded-full bg-coral transition-all"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-[var(--muted)] w-8 text-right">
-                      {Math.round(pct)}%
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
 
             <Link
               href={`/club/discussion/${currentBook.id}`}

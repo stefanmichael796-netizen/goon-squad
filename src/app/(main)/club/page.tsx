@@ -614,14 +614,14 @@ export default function ClubPage() {
                 {overview.characters && (
                   <div>
                     <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-1.5">
-                      Who&apos;s who <span className="font-normal normal-case">(spoiler-free)</span>
+                      Who&apos;s who
                     </h4>
                     <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed whitespace-pre-wrap">
                       {overview.characters}
                     </p>
                   </div>
                 )}
-                <p className="text-[10px] text-[var(--muted)] italic">AI-generated · spoiler-free</p>
+                <p className="text-[10px] text-[var(--muted)] italic">AI-generated</p>
               </div>
             ) : overviewError ? (
               <div className="mt-4 space-y-2">
@@ -635,7 +635,7 @@ export default function ClubPage() {
               </div>
             ) : (
               <div className="mt-4 flex items-center gap-2 text-sm text-[var(--muted)]">
-                <Loader2 className="w-4 h-4 animate-spin" /> Writing a spoiler-free overview…
+                <Loader2 className="w-4 h-4 animate-spin" /> Writing an overview…
               </div>
             )}
 

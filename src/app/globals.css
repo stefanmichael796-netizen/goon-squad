@@ -2,49 +2,78 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-cream: #FAFAFA;
-  --color-ink: #1A1A2E;
-  --color-coral: #1E3A5F;
-  --color-ochre: #D4A843;
-  --color-sand: #F0F0F0;
-  --color-cream-dark: #F5F5F5;
+  --color-cream: #FBF7FF;
+  --color-ink: #3A2E4D;
+  --color-coral: #9869E0;
+  --color-ochre: #F2A33C;
+  --color-sand: #F0E9FB;
+  --color-cream-dark: #F3ECFB;
 
-  --color-dark-bg: #0F1923;
-  --color-dark-surface: #1A2733;
-  --color-dark-text: #E8ECF0;
-  --color-dark-muted: #8899AA;
-  --color-dark-border: #2A3744;
+  --color-dark-bg: #1A1530;
+  --color-dark-surface: #251E42;
+  --color-dark-text: #ECE6FA;
+  --color-dark-muted: #A99CC9;
+  --color-dark-border: #3A3158;
 
   --font-serif: 'Lora', Georgia, 'Times New Roman', serif;
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 :root {
-  --background: #FAFAFA;
-  --foreground: #1A1A2E;
-  --surface: #FFFFFF;
-  --muted: #6B7280;
-  --border: #E5E7EB;
-  --accent: #1E3A5F;
+  /* Opaque base used by sheets, dropdowns and modals */
+  --background: #FBF7FF;
+  --foreground: #3A2E4D;
+  /* Frosted translucent surface — lets the dreamy gradient glow through */
+  --surface: rgba(255, 255, 255, 0.62);
+  --muted: #8B7AA8;
+  --border: rgba(152, 105, 224, 0.18);
+  --accent: #9869E0;
+
+  /* Dreamy gradient tokens */
+  --gradient-base: linear-gradient(160deg, #FDE8F3 0%, #EAE4FF 48%, #E0F1FF 100%);
+  --gradient-accent: linear-gradient(135deg, #A98BF0 0%, #F2A7CE 100%);
+  --gradient-accent-soft: linear-gradient(135deg, rgba(169, 139, 240, 0.16) 0%, rgba(242, 167, 206, 0.16) 100%);
 }
 
 .dark {
-  --background: #0F1923;
-  --foreground: #E8ECF0;
-  --surface: #1A2733;
-  --muted: #8899AA;
-  --border: #2A3744;
-  --accent: #4A90D9;
+  --background: #1A1530;
+  --foreground: #ECE6FA;
+  --surface: rgba(54, 44, 90, 0.55);
+  --muted: #A99CC9;
+  --border: rgba(180, 150, 240, 0.18);
+  --accent: #B79CF0;
+
+  --gradient-base: linear-gradient(160deg, #2A1F47 0%, #1E1838 50%, #1A2440 100%);
+  --gradient-accent: linear-gradient(135deg, #8B6FD4 0%, #D98BB8 100%);
+  --gradient-accent-soft: linear-gradient(135deg, rgba(139, 111, 212, 0.22) 0%, rgba(217, 139, 184, 0.22) 100%);
+}
+
+html {
+  min-height: 100%;
 }
 
 body {
-  background: var(--background);
+  min-height: 100vh;
+  background: var(--gradient-base);
+  background-attachment: fixed;
   color: var(--foreground);
   font-family: var(--font-sans);
 }
 
 * {
   border-color: var(--border);
+}
+
+/* Frosted surfaces get a soft blur for the dreamy look */
+.bg-\[var\(--surface\)\] {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Primary actions become a dreamy duotone gradient */
+.bg-coral {
+  background-color: var(--color-coral);
+  background-image: var(--gradient-accent);
 }
 
 input::placeholder,

@@ -140,9 +140,9 @@ export function LogBookSheet({ open, onClose, onSuccess, clubId, preSelectedBook
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
+    <div className="fixed inset-0 z-50 flex items-start justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-lg bg-[var(--background)] rounded-t-2xl max-h-[85vh] overflow-y-auto animate-slide-up">
+      <div className="relative w-full max-w-lg bg-[var(--background)] rounded-b-2xl max-h-[100dvh] overflow-y-auto animate-fade-in">
         <div className="sticky top-0 bg-[var(--background)] border-b border-[var(--border)] px-4 py-3 flex items-center justify-between z-10">
           <h2 className="font-serif font-semibold text-lg text-[var(--foreground)]">
             {step === "search" ? "Find a book" : isReread ? "Log re-read" : "Log it"}

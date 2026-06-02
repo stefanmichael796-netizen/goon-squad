@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { StarRating } from "@/components/ui/star-rating";
-import { X, MessageCircle, Plus } from "lucide-react";
+import { X, MessageCircle, Plus, Loader2, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 interface MemberRating {
@@ -32,7 +32,6 @@ interface ClubBookSheetProps {
   bookAuthors: string[] | null;
   coverUrl: string | null;
   description: string | null;
-  characters: string | null;
   endedOn: string | null;
   avgRating: number | null;
   memberRatings: MemberRating[];
@@ -49,7 +48,6 @@ export function ClubBookSheet({
   bookAuthors,
   coverUrl,
   description,
-  characters,
   endedOn,
   avgRating,
   memberRatings,
@@ -57,9 +55,9 @@ export function ClubBookSheet({
   onUpdate,
 }: ClubBookSheetProps) {
   const [quotes, setQuotes] = useState<ClubQuote[]>([]);
-  const [charactersText, setCharactersText] = useState("");
-  const [editingChars, setEditingChars] = useState(false);
-  const [savingChars, setSavingChars] = useState(false);
+  const [overview, setOverview] = useState<{ synopsis: string; characters: string } | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
   const [dateRead, setDateRead] = useState("");
   const [savingDate, setSavingDate] = useState(false);
   const [newQuote, setNewQuote] = useState("");
@@ -92,17 +90,39 @@ export function ClubBookSheet({
     }
   }, [bookId, clubId, supabase]);
 
+  const loadOverview = useCallback(async (id: string, refresh = false) => {
+    setOverviewLoading(true);
+    setOverviewError(null);
+    try {
+      const res = await fetch("/api/club/overview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clubBookId: id, refresh }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setOverviewError(data.error || "Couldn't generate an overview.");
+      } else {
+        setOverview({ synopsis: data.synopsis, characters: data.characters });
+      }
+    } catch {
+      setOverviewError("Network error. Try again.");
+    }
+    setOverviewLoading(false);
+  }, []);
+
   useEffect(() => {
     if (open) {
-      setCharactersText(characters || "");
       setDateRead(endedOn || "");
-      setEditingChars(false);
       setAddingQuote(false);
       setNewQuote("");
       setNewQuotePage("");
+      setOverview(null);
+      setOverviewError(null);
       loadQuotes();
+      if (clubBookId) loadOverview(clubBookId);
     }
-  }, [open, characters, endedOn, loadQuotes]);
+  }, [open, endedOn, clubBookId, loadQuotes, loadOverview]);
 
   async function saveDateRead(value: string) {
     if (!clubBookId) return;
@@ -113,18 +133,6 @@ export function ClubBookSheet({
       .update({ ended_on: value || null })
       .eq("id", clubBookId);
     setSavingDate(false);
-    onUpdate();
-  }
-
-  async function saveCharacters() {
-    if (!clubBookId) return;
-    setSavingChars(true);
-    await supabase
-      .from("club_books")
-      .update({ characters: charactersText || null })
-      .eq("id", clubBookId);
-    setEditingChars(false);
-    setSavingChars(false);
     onUpdate();
   }
 
@@ -224,36 +232,75 @@ export function ClubBookSheet({
             />
           </section>
 
-          {/* Individual scores */}
-          {memberRatings.length > 0 && (
+          {/* Individual scores — only members who have actually rated it */}
+          {memberRatings.some((mr) => mr.rating !== null) && (
             <section>
               <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
                 Squad scores
               </h4>
               <div className="grid grid-cols-2 gap-2">
-                {memberRatings.map((mr) => (
-                  <div
-                    key={mr.user_id}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)]"
-                  >
-                    <span className="text-sm text-[var(--foreground)] truncate">
-                      {mr.display_name}
-                    </span>
-                    {mr.rating !== null ? (
+                {memberRatings
+                  .filter((mr) => mr.rating !== null)
+                  .map((mr) => (
+                    <div
+                      key={mr.user_id}
+                      className="flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)]"
+                    >
+                      <span className="text-sm text-[var(--foreground)] truncate">
+                        {mr.display_name}
+                      </span>
                       <span className="text-sm font-bold text-[var(--foreground)]">
                         {mr.rating}
                       </span>
-                    ) : (
-                      <span className="text-xs text-[var(--muted)]">—</span>
-                    )}
-                  </div>
-                ))}
+                    </div>
+                  ))}
               </div>
             </section>
           )}
 
-          {/* Synopsis */}
-          {cleanDescription && (
+          {/* AI synopsis + characters — generated automatically */}
+          {overviewLoading ? (
+            <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+              <Loader2 className="w-4 h-4 animate-spin" /> Writing an overview…
+            </div>
+          ) : overview ? (
+            <>
+              <section>
+                <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
+                  Synopsis
+                </h4>
+                <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed">
+                  {overview.synopsis}
+                </p>
+              </section>
+              {overview.characters && (
+                <section>
+                  <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
+                    Who&apos;s who
+                  </h4>
+                  <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed whitespace-pre-wrap">
+                    {overview.characters}
+                  </p>
+                </section>
+              )}
+              <p className="text-[10px] text-[var(--muted)] italic">AI-generated</p>
+            </>
+          ) : overviewError ? (
+            <section className="space-y-2">
+              <p className="text-xs text-red-500">{overviewError}</p>
+              <button
+                onClick={() => clubBookId && loadOverview(clubBookId, true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-coral text-white text-sm font-medium transition-opacity hover:opacity-90"
+              >
+                <Sparkles className="w-4 h-4" /> Try again
+              </button>
+              {cleanDescription && (
+                <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed pt-1">
+                  {cleanDescription}
+                </p>
+              )}
+            </section>
+          ) : cleanDescription ? (
             <section>
               <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
                 Synopsis
@@ -262,61 +309,7 @@ export function ClubBookSheet({
                 {cleanDescription}
               </p>
             </section>
-          )}
-
-          {/* Main characters */}
-          <section>
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                Main characters
-              </h4>
-              {!editingChars && (
-                <button
-                  onClick={() => setEditingChars(true)}
-                  className="text-xs text-coral hover:underline"
-                >
-                  {characters ? "Edit" : "Add"}
-                </button>
-              )}
-            </div>
-            {editingChars ? (
-              <div className="space-y-2">
-                <textarea
-                  value={charactersText}
-                  onChange={(e) => setCharactersText(e.target.value)}
-                  placeholder={"Toru — narrator, university student in 1960s Tokyo\nNaoko — Toru's fragile first love\nMidori — vivacious classmate..."}
-                  rows={6}
-                  className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] text-sm font-serif focus:outline-none focus:ring-2 focus:ring-coral/30 resize-none"
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={saveCharacters}
-                    disabled={savingChars}
-                    className="flex-1 py-2 rounded-lg bg-coral text-white text-sm font-medium disabled:opacity-50"
-                  >
-                    {savingChars ? "Saving..." : "Save"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setCharactersText(characters || "");
-                      setEditingChars(false);
-                    }}
-                    className="flex-1 py-2 rounded-lg border border-[var(--border)] text-sm text-[var(--foreground)]"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : characters ? (
-              <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed whitespace-pre-wrap">
-                {characters}
-              </p>
-            ) : (
-              <p className="text-sm text-[var(--muted)] italic">
-                No characters listed yet.
-              </p>
-            )}
-          </section>
+          ) : null}
 
           {/* Quotes */}
           <section>

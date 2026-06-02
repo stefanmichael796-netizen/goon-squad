@@ -7,6 +7,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items: [] });
   }
 
-  const items = await searchBooks(q);
-  return NextResponse.json({ items });
+  const result = await searchBooks(q);
+  if (!result.ok) {
+    return NextResponse.json({ items: [], error: result.error }, { status: 200 });
+  }
+  return NextResponse.json({ items: result.items });
 }

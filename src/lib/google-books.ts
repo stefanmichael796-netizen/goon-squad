@@ -2,10 +2,14 @@ import type { GoogleBooksVolume, Book } from "./types";
 
 const API_BASE = "https://www.googleapis.com/books/v1/volumes";
 
+export type SearchResult =
+  | { ok: true; items: GoogleBooksVolume[] }
+  | { ok: false; error: "quota" | "network" | "unknown" };
+
 export async function searchBooks(
   query: string,
   maxResults = 10
-): Promise<GoogleBooksVolume[]> {
+): Promise<SearchResult> {
   const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
   const params = new URLSearchParams({
     q: query,
@@ -18,11 +22,16 @@ export async function searchBooks(
     const res = await fetch(`${API_BASE}?${params}`, {
       next: { revalidate: 300 },
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      if (res.status === 429 || res.status === 403) {
+        return { ok: false, error: "quota" };
+      }
+      return { ok: false, error: "unknown" };
+    }
     const data = await res.json();
-    return data.items || [];
+    return { ok: true, items: data.items || [] };
   } catch {
-    return [];
+    return { ok: false, error: "network" };
   }
 }
 

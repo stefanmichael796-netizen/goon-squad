@@ -31,6 +31,7 @@ export default function PersonalPage() {
   const [searchResults, setSearchResults] = useState<GoogleBooksVolume[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [selectedVolume, setSelectedVolume] = useState<GoogleBooksVolume | null>(null);
   const [selectedShelfBook, setSelectedShelfBook] = useState<UserBook | null>(null);
   const [bookRatings, setBookRatings] = useState<Record<string, { rating: number | null; review: string | null }>>({});
@@ -205,6 +206,7 @@ export default function PersonalPage() {
 
   function handleSearch(q: string) {
     setSearchQuery(q);
+    setSearchError(null);
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     if (q.length < 2) { setSearchResults([]); return; }
     searchTimeout.current = setTimeout(async () => {
@@ -213,7 +215,15 @@ export default function PersonalPage() {
         const res = await fetch(`/api/books/search?q=${encodeURIComponent(q)}`);
         const data = await res.json();
         setSearchResults(data.items || []);
-      } catch { setSearchResults([]); }
+        if (data.error === "quota") {
+          setSearchError("Google Books quota hit for the day. Add a GOOGLE_BOOKS_API_KEY in Vercel.");
+        } else if (data.error) {
+          setSearchError("Search is having trouble. Try again in a moment.");
+        }
+      } catch {
+        setSearchResults([]);
+        setSearchError("Network error. Check your connection.");
+      }
       setSearching(false);
     }, 400);
   }
@@ -269,57 +279,92 @@ export default function PersonalPage() {
         </div>
       </div>
 
-      {/* Search bar */}
-      <div className="relative">
-        <Search className="absolute left-3 top-3 w-4 h-4 text-[var(--muted)]" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => handleSearch(e.target.value)}
-          onFocus={() => setSearchFocused(true)}
-          placeholder="Search books to add..."
-          className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
-        />
-        {searching && (
-          <Loader2 className="absolute right-3 top-3 w-4 h-4 text-[var(--muted)] animate-spin" />
-        )}
-
-        {searchFocused && searchResults.length > 0 && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--background)] border border-[var(--border)] rounded-lg shadow-lg z-30 max-h-80 overflow-y-auto">
-            {searchResults.map((vol) => (
-              <button
-                key={vol.id}
-                onClick={() => selectSearchResult(vol)}
-                className="w-full flex gap-3 p-3 hover:bg-[var(--surface)] transition-colors text-left border-b border-[var(--border)] last:border-b-0"
-              >
-                <BookCover
-                  coverUrl={vol.volumeInfo.imageLinks?.thumbnail}
-                  title={vol.volumeInfo.title}
-                  size="sm"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-serif font-medium text-[var(--foreground)] truncate">
-                    {vol.volumeInfo.title}
-                  </p>
-                  <p className="text-sm text-[var(--muted)]">
-                    {vol.volumeInfo.authors?.join(", ")}
-                  </p>
-                  <p className="text-xs text-[var(--muted)]">
-                    {vol.volumeInfo.publishedDate}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
+      {/* Search bar (inline placeholder keeps page layout when focused) */}
+      <div className="relative h-11">
+        {!searchFocused && (
+          <>
+            <Search className="absolute left-3 top-3 w-4 h-4 text-[var(--muted)] z-10" />
+            <input
+              type="text"
+              value={searchQuery}
+              readOnly
+              onFocus={() => setSearchFocused(true)}
+              onClick={() => setSearchFocused(true)}
+              placeholder="Search books to add..."
+              className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
+            />
+          </>
         )}
       </div>
 
-      {/* Dismiss search overlay */}
-      {searchFocused && searchResults.length > 0 && (
-        <div
-          className="fixed inset-0 z-20"
-          onClick={() => { setSearchFocused(false); setSearchResults([]); }}
-        />
+      {/* Active search overlay — sticks to top of viewport */}
+      {searchFocused && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/30"
+            onClick={() => {
+              setSearchFocused(false);
+              setSearchResults([]);
+              setSearchQuery("");
+              setSearchError(null);
+            }}
+          />
+          <div className="fixed top-0 left-0 right-0 z-50 bg-[var(--background)] border-b border-[var(--border)] shadow-md">
+            <div className="max-w-lg mx-auto w-full px-4 py-3 space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 w-4 h-4 text-[var(--muted)]" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  autoFocus
+                  placeholder="Search books to add..."
+                  className="w-full pl-9 pr-9 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
+                />
+                {searching && (
+                  <Loader2 className="absolute right-3 top-3 w-4 h-4 text-[var(--muted)] animate-spin" />
+                )}
+              </div>
+
+              {searchError && (
+                <p className="text-xs text-red-500 px-1">{searchError}</p>
+              )}
+
+              {searchResults.length > 0 && (
+                <div className="bg-[var(--background)] border border-[var(--border)] rounded-lg max-h-[60vh] overflow-y-auto">
+                  {searchResults.map((vol) => (
+                    <button
+                      key={vol.id}
+                      onClick={() => selectSearchResult(vol)}
+                      className="w-full flex gap-3 p-3 hover:bg-[var(--surface)] transition-colors text-left border-b border-[var(--border)] last:border-b-0"
+                    >
+                      <BookCover
+                        coverUrl={vol.volumeInfo.imageLinks?.thumbnail}
+                        title={vol.volumeInfo.title}
+                        size="sm"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-serif font-medium text-[var(--foreground)] truncate">
+                          {vol.volumeInfo.title}
+                        </p>
+                        <p className="text-sm text-[var(--muted)]">
+                          {vol.volumeInfo.authors?.join(", ")}
+                        </p>
+                        <p className="text-xs text-[var(--muted)]">
+                          {vol.volumeInfo.publishedDate}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {searchQuery.length >= 2 && !searching && searchResults.length === 0 && !searchError && (
+                <p className="text-sm text-[var(--muted)] italic px-1">No books found.</p>
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       {/* 5 Favourites shelf */}

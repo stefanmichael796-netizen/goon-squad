@@ -239,6 +239,86 @@ export default function PersonalPage() {
   if (loading) return <Loading />;
 
   return (
+    <>
+    {/* Full-screen search overlay — rendered outside scrollable page so iOS doesn't break it */}
+    {searchFocused && (
+      <div className="fixed inset-0 z-50 flex flex-col bg-[var(--background)]">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--border)] flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setSearchFocused(false);
+              setSearchResults([]);
+              setSearchQuery("");
+              setSearchError(null);
+            }}
+            className="text-sm text-coral font-medium flex-shrink-0"
+          >
+            Cancel
+          </button>
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-3 w-4 h-4 text-[var(--muted)]" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              autoFocus
+              placeholder="Title or author"
+              className="w-full pl-9 pr-9 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
+            />
+            {searching && (
+              <Loader2 className="absolute right-3 top-3 w-4 h-4 text-[var(--muted)] animate-spin" />
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+          {searchError && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+              <p className="text-sm text-red-500">{searchError}</p>
+            </div>
+          )}
+
+          {searchResults.map((vol) => (
+            <button
+              key={vol.id}
+              onClick={() => selectSearchResult(vol)}
+              className="w-full flex gap-3 p-3 rounded-lg hover:bg-[var(--surface)] transition-colors text-left border border-[var(--border)]"
+            >
+              <BookCover
+                coverUrl={vol.volumeInfo.imageLinks?.thumbnail}
+                title={vol.volumeInfo.title}
+                size="sm"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="font-serif font-medium text-[var(--foreground)] truncate">
+                  {vol.volumeInfo.title}
+                </p>
+                <p className="text-sm text-[var(--muted)]">
+                  {vol.volumeInfo.authors?.join(", ")}
+                </p>
+                <p className="text-xs text-[var(--muted)]">
+                  {vol.volumeInfo.publishedDate}
+                </p>
+              </div>
+            </button>
+          ))}
+
+          {searchQuery.length >= 2 && !searching && searchResults.length === 0 && !searchError && (
+            <p className="text-sm text-[var(--muted)] italic py-4 text-center">
+              No books found.
+            </p>
+          )}
+
+          {searchQuery.length < 2 && !searchError && (
+            <p className="text-sm text-[var(--muted)] italic py-4 text-center">
+              Start typing to search.
+            </p>
+          )}
+        </div>
+      </div>
+    )}
+
     <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-8">
       {/* Profile header */}
       <div className="flex items-start justify-between">
@@ -289,84 +369,6 @@ export default function PersonalPage() {
         <span className="text-sm">Search books to add...</span>
       </button>
 
-      {/* Full-screen search — flex column keeps input at top above keyboard */}
-      {searchFocused && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[var(--background)]">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--border)] flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                setSearchFocused(false);
-                setSearchResults([]);
-                setSearchQuery("");
-                setSearchError(null);
-              }}
-              className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] flex-shrink-0"
-            >
-              Cancel
-            </button>
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-3 w-4 h-4 text-[var(--muted)]" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-                autoFocus
-                placeholder="Title or author"
-                className="w-full pl-9 pr-9 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
-              />
-              {searching && (
-                <Loader2 className="absolute right-3 top-3 w-4 h-4 text-[var(--muted)] animate-spin" />
-              )}
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-            {searchError && (
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-                <p className="text-sm text-red-500">{searchError}</p>
-              </div>
-            )}
-
-            {searchResults.map((vol) => (
-              <button
-                key={vol.id}
-                onClick={() => selectSearchResult(vol)}
-                className="w-full flex gap-3 p-3 rounded-lg hover:bg-[var(--surface)] transition-colors text-left border border-[var(--border)]"
-              >
-                <BookCover
-                  coverUrl={vol.volumeInfo.imageLinks?.thumbnail}
-                  title={vol.volumeInfo.title}
-                  size="sm"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-serif font-medium text-[var(--foreground)] truncate">
-                    {vol.volumeInfo.title}
-                  </p>
-                  <p className="text-sm text-[var(--muted)]">
-                    {vol.volumeInfo.authors?.join(", ")}
-                  </p>
-                  <p className="text-xs text-[var(--muted)]">
-                    {vol.volumeInfo.publishedDate}
-                  </p>
-                </div>
-              </button>
-            ))}
-
-            {searchQuery.length >= 2 && !searching && searchResults.length === 0 && !searchError && (
-              <p className="text-sm text-[var(--muted)] italic px-1 py-4 text-center">
-                No books found.
-              </p>
-            )}
-
-            {searchQuery.length < 2 && !searchError && (
-              <p className="text-sm text-[var(--muted)] italic px-1 py-4 text-center">
-                Start typing to search.
-              </p>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* 5 Favourites shelf */}
       <section>
@@ -592,5 +594,6 @@ export default function PersonalPage() {
         />
       )}
     </div>
+    </>
   );
 }

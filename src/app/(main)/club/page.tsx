@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { Loading } from "@/components/ui/loading";
 import { LogBookSheet } from "@/components/shared/log-book-sheet";
 import { ClubBookSheet } from "@/components/shared/club-book-sheet";
 import { Fab } from "@/components/shared/fab";
-import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles } from "lucide-react";
+import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles, Camera } from "lucide-react";
 import Link from "next/link";
 import type { Club, ClubMember, ClubBook, Profile, GoogleBooksVolume } from "@/lib/types";
 
@@ -43,6 +43,9 @@ export default function ClubPage() {
   const [pickSearching, setPickSearching] = useState(false);
   const [pickSaving, setPickSaving] = useState(false);
   const [selectedBook, setSelectedBook] = useState<BookWithRatings | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [clubAction, setClubAction] = useState<"create" | "join">("create");
   const [clubName, setClubName] = useState("");
@@ -56,6 +59,7 @@ export default function ClubPage() {
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+    setUserId(user.id);
 
     const { data: membership } = await supabase
       .from("club_members")
@@ -193,6 +197,27 @@ export default function ClubPage() {
       loadOverview(currentBook.id);
     }
   }, [currentBook, overview, overviewLoading, overviewError, overviewTried, loadOverview]);
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file || !club) return;
+
+    setUploadingLogo(true);
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${club.id}/${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("club-logos")
+      .upload(path, file, { upsert: true, contentType: file.type });
+
+    if (!uploadError) {
+      const { data } = supabase.storage.from("club-logos").getPublicUrl(path);
+      await supabase.from("clubs").update({ logo_url: data.publicUrl }).eq("id", club.id);
+      setClub({ ...club, logo_url: data.publicUrl });
+    }
+    setUploadingLogo(false);
+  }
 
   function copyInviteCode() {
     if (!club) return;
@@ -384,16 +409,56 @@ export default function ClubPage() {
   return (
     <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6">
       {/* Club header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="font-serif font-bold text-2xl text-[var(--foreground)]">
-            {club.name}
-          </h1>
-          {club.description && (
-            <p className="text-sm text-[var(--muted)] mt-0.5">{club.description}</p>
-          )}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {(() => {
+            const isOwner = userId === club.created_by;
+            return (
+              <button
+                type="button"
+                onClick={() => isOwner && logoInputRef.current?.click()}
+                disabled={!isOwner || uploadingLogo}
+                className="relative w-14 h-14 rounded-full overflow-hidden flex-shrink-0 bg-coral/15 border border-[var(--border)] flex items-center justify-center"
+                aria-label={isOwner ? "Change club photo" : "Club photo"}
+              >
+                {club.logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={club.logo_url} alt={club.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="font-serif font-bold text-xl text-coral">
+                    {club.name?.[0]?.toUpperCase() || "?"}
+                  </span>
+                )}
+                {uploadingLogo && (
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/40">
+                    <Loader2 className="w-5 h-5 text-white animate-spin" />
+                  </span>
+                )}
+                {isOwner && !uploadingLogo && (
+                  <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-coral border-2 border-[var(--background)] flex items-center justify-center">
+                    <Camera className="w-2.5 h-2.5 text-white" />
+                  </span>
+                )}
+              </button>
+            );
+          })()}
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleLogoUpload}
+            className="hidden"
+          />
+          <div className="min-w-0">
+            <h1 className="font-serif font-bold text-2xl text-[var(--foreground)] truncate">
+              {club.name}
+            </h1>
+            {club.description && (
+              <p className="text-sm text-[var(--muted)] mt-0.5 truncate">{club.description}</p>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-shrink-0">
           {members.slice(0, 4).map((m) => (
             <div
               key={m.user_id}

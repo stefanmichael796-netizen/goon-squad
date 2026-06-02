@@ -73,6 +73,7 @@ export interface Club {
   description: string | null;
   created_by: string;
   invite_code: string;
+  logo_url: string | null;
   created_at: string;
 }
 

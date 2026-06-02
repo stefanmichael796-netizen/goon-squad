@@ -32,6 +32,7 @@ export default function ClubPage() {
   const [overview, setOverview] = useState<{ synopsis: string; characters: string } | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [overviewTried, setOverviewTried] = useState<string | null>(null);
   const [logSheetOpen, setLogSheetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -156,7 +157,7 @@ export default function ClubPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  async function loadOverview(clubBookId: string, refresh = false) {
+  const loadOverview = useCallback(async (clubBookId: string, refresh = false) => {
     setOverviewLoading(true);
     setOverviewError(null);
     try {
@@ -175,7 +176,23 @@ export default function ClubPage() {
       setOverviewError("Network error. Try again.");
     }
     setOverviewLoading(false);
-  }
+  }, []);
+
+  // Auto-generate the spoiler-free overview as soon as a club book is set and
+  // there's no cached version yet — no button press needed. The overviewTried
+  // guard makes sure we only kick off one generation per book.
+  useEffect(() => {
+    if (
+      currentBook &&
+      !overview &&
+      !overviewLoading &&
+      !overviewError &&
+      overviewTried !== currentBook.id
+    ) {
+      setOverviewTried(currentBook.id);
+      loadOverview(currentBook.id);
+    }
+  }, [currentBook, overview, overviewLoading, overviewError, overviewTried, loadOverview]);
 
   function copyInviteCode() {
     if (!club) return;
@@ -500,12 +517,8 @@ export default function ClubPage() {
               </div>
             </div>
 
-            {/* AI synopsis + spoiler-free characters */}
-            {overviewLoading ? (
-              <div className="mt-4 flex items-center gap-2 text-sm text-[var(--muted)]">
-                <Loader2 className="w-4 h-4 animate-spin" /> Writing a spoiler-free overview…
-              </div>
-            ) : overview ? (
+            {/* AI synopsis + spoiler-free characters — generated automatically */}
+            {overview ? (
               <div className="mt-4 space-y-4">
                 <div>
                   <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-1.5">
@@ -527,17 +540,19 @@ export default function ClubPage() {
                 )}
                 <p className="text-[10px] text-[var(--muted)] italic">AI-generated · spoiler-free</p>
               </div>
-            ) : (
+            ) : overviewError ? (
               <div className="mt-4 space-y-2">
-                {overviewError && (
-                  <p className="text-xs text-red-500">{overviewError}</p>
-                )}
+                <p className="text-xs text-red-500">{overviewError}</p>
                 <button
                   onClick={() => loadOverview(currentBook.id, true)}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-coral text-white text-sm font-medium transition-opacity hover:opacity-90"
                 >
-                  <Sparkles className="w-4 h-4" /> Generate spoiler-free overview
+                  <Sparkles className="w-4 h-4" /> Try again
                 </button>
+              </div>
+            ) : (
+              <div className="mt-4 flex items-center gap-2 text-sm text-[var(--muted)]">
+                <Loader2 className="w-4 h-4 animate-spin" /> Writing a spoiler-free overview…
               </div>
             )}
 

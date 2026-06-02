@@ -29,6 +29,15 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Dormant features: the personal shelf + insights are hidden for now, so any
+  // direct navigation to them bounces to the club page.
+  const dormantPaths = ["/personal", "/insights"];
+  if (dormantPaths.some((p) => request.nextUrl.pathname.startsWith(p))) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/club";
+    return NextResponse.redirect(url);
+  }
+
   const publicPaths = ["/", "/login", "/signup", "/auth/callback"];
   const isPublicPath = publicPaths.some(
     (path) =>

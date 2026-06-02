@@ -128,7 +128,7 @@ export default function BookDetailPage() {
   return (
     <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6">
       <Link
-        href="/personal"
+        href="/club"
         className="inline-flex items-center gap-1 text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
       >
         <ArrowLeft className="w-4 h-4" /> Back

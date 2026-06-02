@@ -41,7 +41,7 @@ export default function OnboardingPage() {
           .single();
 
         if (membership) {
-          router.push("/personal");
+          router.push("/club");
           return;
         }
         setStep("club");
@@ -98,7 +98,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      router.push("/personal");
+      router.push("/club");
       router.refresh();
     } catch {
       setError("Something went wrong");

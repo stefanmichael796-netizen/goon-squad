@@ -383,6 +383,71 @@ export default function ClubPage() {
         </div>
       </div>
 
+      {/* Inline pick-book search — expands in normal flow so it stays visible */}
+      {pickBookOpen && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3 w-4 h-4 text-[var(--muted)]" />
+              <input
+                type="text"
+                value={pickQuery}
+                onChange={(e) => handlePickSearch(e.target.value)}
+                autoFocus
+                placeholder="Search a book for the club"
+                className="w-full pl-9 pr-9 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
+              />
+              {pickSearching && (
+                <Loader2 className="absolute right-3 top-3 w-4 h-4 text-[var(--muted)] animate-spin" />
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => { setPickBookOpen(false); setPickQuery(""); setPickResults([]); }}
+              className="text-sm text-coral font-medium flex-shrink-0 px-1"
+            >
+              Cancel
+            </button>
+          </div>
+
+          {pickResults.length > 0 && (
+            <div className="space-y-2">
+              {pickResults.map((vol) => (
+                <button
+                  key={vol.id}
+                  onClick={() => handlePickBook(vol)}
+                  disabled={pickSaving}
+                  className="w-full flex gap-3 p-3 rounded-lg hover:bg-[var(--surface)] transition-colors text-left border border-[var(--border)] disabled:opacity-50"
+                >
+                  <BookCover
+                    coverUrl={vol.volumeInfo.imageLinks?.thumbnail}
+                    title={vol.volumeInfo.title}
+                    size="sm"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-serif font-medium text-[var(--foreground)] truncate">
+                      {vol.volumeInfo.title}
+                    </p>
+                    <p className="text-sm text-[var(--muted)]">
+                      {vol.volumeInfo.authors?.join(", ")}
+                    </p>
+                    <p className="text-xs text-[var(--muted)]">
+                      {vol.volumeInfo.publishedDate}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {pickQuery.length >= 2 && !pickSearching && pickResults.length === 0 && (
+            <p className="text-sm text-[var(--muted)] italic py-2 text-center">
+              No books found.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Current read */}
       {currentBook?.book && (
         <section className="rounded-xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden">
@@ -580,62 +645,6 @@ export default function ClubPage() {
         </div>
       )}
 
-      {/* Pick book sheet */}
-      {pickBookOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setPickBookOpen(false)} />
-          <div className="relative w-full max-w-lg bg-[var(--background)] rounded-t-2xl max-h-[85vh] overflow-y-auto animate-slide-up">
-            <div className="sticky top-0 bg-[var(--background)] border-b border-[var(--border)] px-4 py-3 flex items-center justify-between z-10">
-              <h2 className="font-serif font-semibold text-lg text-[var(--foreground)]">
-                Pick club book
-              </h2>
-              <button onClick={() => setPickBookOpen(false)} className="p-1 text-[var(--muted)] hover:text-[var(--foreground)]">
-                ✕
-              </button>
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-3 w-4 h-4 text-[var(--muted)]" />
-                <input
-                  type="text"
-                  value={pickQuery}
-                  onChange={(e) => handlePickSearch(e.target.value)}
-                  placeholder="Search by title or author"
-                  autoFocus
-                  className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/30"
-                />
-                {pickSearching && (
-                  <Loader2 className="absolute right-3 top-3 w-4 h-4 text-[var(--muted)] animate-spin" />
-                )}
-              </div>
-              <div className="space-y-2">
-                {pickResults.map((vol) => (
-                  <button
-                    key={vol.id}
-                    onClick={() => handlePickBook(vol)}
-                    disabled={pickSaving}
-                    className="w-full flex gap-3 p-3 rounded-lg hover:bg-[var(--surface)] transition-colors text-left disabled:opacity-50"
-                  >
-                    <BookCover
-                      coverUrl={vol.volumeInfo.imageLinks?.thumbnail}
-                      title={vol.volumeInfo.title}
-                      size="sm"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-serif font-medium text-[var(--foreground)] truncate">
-                        {vol.volumeInfo.title}
-                      </p>
-                      <p className="text-sm text-[var(--muted)]">
-                        {vol.volumeInfo.authors?.join(", ")}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <LogBookSheet
         open={logSheetOpen}

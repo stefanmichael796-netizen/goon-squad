@@ -2,18 +2,18 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-cream: #FBF7FF;
-  --color-ink: #3A2E4D;
-  --color-coral: #9869E0;
+  --color-cream: #F4FBF5;
+  --color-ink: #26352E;
+  --color-coral: #2E9E72;
   --color-ochre: #F2A33C;
-  --color-sand: #F0E9FB;
-  --color-cream-dark: #F3ECFB;
+  --color-sand: #E7F5EC;
+  --color-cream-dark: #EAF6EE;
 
-  --color-dark-bg: #1A1530;
-  --color-dark-surface: #251E42;
-  --color-dark-text: #ECE6FA;
-  --color-dark-muted: #A99CC9;
-  --color-dark-border: #3A3158;
+  --color-dark-bg: #14241C;
+  --color-dark-surface: #1E3328;
+  --color-dark-text: #E6F4EC;
+  --color-dark-muted: #94B3A2;
+  --color-dark-border: #31503F;
 
   --font-serif: 'Lora', Georgia, 'Times New Roman', serif;
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
@@ -21,31 +21,31 @@
 
 :root {
   /* Opaque base used by sheets, dropdowns and modals */
-  --background: #FBF7FF;
-  --foreground: #3A2E4D;
+  --background: #F4FBF5;
+  --foreground: #26352E;
   /* Frosted translucent surface — lets the dreamy gradient glow through */
   --surface: rgba(255, 255, 255, 0.62);
-  --muted: #8B7AA8;
-  --border: rgba(152, 105, 224, 0.18);
-  --accent: #9869E0;
+  --muted: #6E8478;
+  --border: rgba(60, 160, 110, 0.18);
+  --accent: #2E9E72;
 
-  /* Dreamy gradient tokens */
-  --gradient-base: linear-gradient(160deg, #FDE8F3 0%, #EAE4FF 48%, #E0F1FF 100%);
-  --gradient-accent: linear-gradient(135deg, #A98BF0 0%, #F2A7CE 100%);
-  --gradient-accent-soft: linear-gradient(135deg, rgba(169, 139, 240, 0.16) 0%, rgba(242, 167, 206, 0.16) 100%);
+  /* Dreamy soft-green gradient tokens */
+  --gradient-base: linear-gradient(160deg, #E8F8E2 0%, #D6F0E6 50%, #DCF3F0 100%);
+  --gradient-accent: linear-gradient(135deg, #4FC08A 0%, #38B0A6 100%);
+  --gradient-accent-soft: linear-gradient(135deg, rgba(79, 192, 138, 0.16) 0%, rgba(56, 176, 166, 0.16) 100%);
 }
 
 .dark {
-  --background: #1A1530;
-  --foreground: #ECE6FA;
-  --surface: rgba(54, 44, 90, 0.55);
-  --muted: #A99CC9;
-  --border: rgba(180, 150, 240, 0.18);
-  --accent: #B79CF0;
+  --background: #14241C;
+  --foreground: #E6F4EC;
+  --surface: rgba(40, 64, 50, 0.55);
+  --muted: #94B3A2;
+  --border: rgba(120, 200, 160, 0.18);
+  --accent: #5FCB9A;
 
-  --gradient-base: linear-gradient(160deg, #2A1F47 0%, #1E1838 50%, #1A2440 100%);
-  --gradient-accent: linear-gradient(135deg, #8B6FD4 0%, #D98BB8 100%);
-  --gradient-accent-soft: linear-gradient(135deg, rgba(139, 111, 212, 0.22) 0%, rgba(217, 139, 184, 0.22) 100%);
+  --gradient-base: linear-gradient(160deg, #1C3326 0%, #16271E 50%, #15302A 100%);
+  --gradient-accent: linear-gradient(135deg, #3FA078 0%, #2E948C 100%);
+  --gradient-accent-soft: linear-gradient(135deg, rgba(63, 160, 120, 0.22) 0%, rgba(46, 148, 140, 0.22) 100%);
 }
 
 html {

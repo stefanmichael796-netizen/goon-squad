@@ -4,9 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { Loading } from "@/components/ui/loading";
-import { LogBookSheet } from "@/components/shared/log-book-sheet";
 import { ClubBookSheet } from "@/components/shared/club-book-sheet";
-import { Fab } from "@/components/shared/fab";
 import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles } from "lucide-react";
 import Link from "next/link";
 import type { Club, ClubMember, ClubBook, Profile, GoogleBooksVolume } from "@/lib/types";
@@ -33,7 +31,6 @@ export default function ClubPage() {
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [overviewTried, setOverviewTried] = useState<string | null>(null);
-  const [logSheetOpen, setLogSheetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -384,31 +381,13 @@ export default function ClubPage() {
   return (
     <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6">
       {/* Club header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="font-serif font-bold text-2xl text-[var(--foreground)]">
-            {club.name}
-          </h1>
-          {club.description && (
-            <p className="text-sm text-[var(--muted)] mt-0.5">{club.description}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          {members.slice(0, 4).map((m) => (
-            <div
-              key={m.user_id}
-              className="w-8 h-8 rounded-full bg-coral/15 flex items-center justify-center text-xs font-bold text-coral -ml-1 first:ml-0 border-2 border-[var(--background)]"
-              title={(m.profile as any)?.display_name}
-            >
-              {(m.profile as any)?.display_name?.[0]?.toUpperCase() || "?"}
-            </div>
-          ))}
-          {members.length > 4 && (
-            <div className="w-8 h-8 rounded-full bg-[var(--border)] flex items-center justify-center text-xs font-medium text-[var(--muted)] -ml-1 border-2 border-[var(--background)]">
-              +{members.length - 4}
-            </div>
-          )}
-        </div>
+      <div>
+        <h1 className="font-serif font-bold text-2xl text-[var(--foreground)]">
+          {club.name}
+        </h1>
+        {club.description && (
+          <p className="text-sm text-[var(--muted)] mt-0.5">{club.description}</p>
+        )}
       </div>
 
       {/* Inline pick-book search — expands in normal flow so it stays visible */}
@@ -663,13 +642,6 @@ export default function ClubPage() {
       )}
 
 
-      <LogBookSheet
-        open={logSheetOpen}
-        onClose={() => setLogSheetOpen(false)}
-        onSuccess={loadData}
-        clubId={club.id}
-      />
-
       <ClubBookSheet
         open={!!selectedBook}
         onClose={() => setSelectedBook(null)}
@@ -686,7 +658,6 @@ export default function ClubPage() {
         onUpdate={loadData}
       />
 
-      <Fab onClick={() => setLogSheetOpen(true)} />
     </div>
   );
 }

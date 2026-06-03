@@ -58,6 +58,8 @@ export function ClubBookSheet({
   const [overview, setOverview] = useState<{ synopsis: string; characters: string } | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [myRating, setMyRating] = useState(0);
+  const [savingRating, setSavingRating] = useState(false);
   const [dateRead, setDateRead] = useState("");
   const [savingDate, setSavingDate] = useState(false);
   const [newQuote, setNewQuote] = useState("");
@@ -111,18 +113,71 @@ export function ClubBookSheet({
     setOverviewLoading(false);
   }, []);
 
+  const loadMyRating = useCallback(async () => {
+    if (!bookId || !clubId) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("logs")
+      .select("rating")
+      .eq("user_id", user.id)
+      .eq("book_id", bookId)
+      .eq("club_id", clubId)
+      .not("rating", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setMyRating(data?.rating ?? 0);
+  }, [bookId, clubId, supabase]);
+
+  async function saveRating(value: number) {
+    if (!bookId || !clubId) return;
+    setMyRating(value);
+    setSavingRating(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSavingRating(false); return; }
+
+    const { data: existing } = await supabase
+      .from("logs")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("book_id", bookId)
+      .eq("club_id", clubId)
+      .in("kind", ["review", "reread"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase.from("logs").update({ rating: value }).eq("id", existing.id);
+    } else {
+      await supabase.from("logs").insert({
+        user_id: user.id,
+        book_id: bookId,
+        club_id: clubId,
+        club_book_id: clubBookId,
+        kind: "review",
+        rating: value,
+      });
+    }
+    setSavingRating(false);
+    onUpdate();
+  }
+
   useEffect(() => {
     if (open) {
       setDateRead(endedOn || "");
+      setMyRating(0);
       setAddingQuote(false);
       setNewQuote("");
       setNewQuotePage("");
       setOverview(null);
       setOverviewError(null);
       loadQuotes();
+      loadMyRating();
       if (clubBookId) loadOverview(clubBookId);
     }
-  }, [open, endedOn, clubBookId, loadQuotes, loadOverview]);
+  }, [open, endedOn, clubBookId, loadQuotes, loadMyRating, loadOverview]);
 
   async function saveDateRead(value: string) {
     if (!clubBookId) return;
@@ -198,22 +253,25 @@ export function ClubBookSheet({
                   </span>
                   <div className="flex flex-col">
                     <StarRating rating={avgRating} size="sm" readonly />
-                    <span className="text-xs text-[var(--muted)] mt-0.5">squad avg</span>
+                    <span className="text-xs text-[var(--muted)] mt-0.5">club avg</span>
                   </div>
                 </div>
               ) : (
                 <p className="text-sm text-[var(--muted)] italic pt-1">No ratings yet</p>
               )}
-              {bookId && (
-                <Link
-                  href={`/book/${bookId}`}
-                  className="inline-block text-xs text-coral hover:underline pt-1"
-                >
-                  Open in personal →
-                </Link>
-              )}
             </div>
           </div>
+
+          {/* Your rating */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                Your rating
+              </h4>
+              {savingRating && <span className="text-xs text-[var(--muted)]">Saving…</span>}
+            </div>
+            <StarRating rating={myRating} onChange={saveRating} size="lg" />
+          </section>
 
           {/* Date read */}
           <section>
@@ -236,7 +294,7 @@ export function ClubBookSheet({
           {memberRatings.some((mr) => mr.rating !== null) && (
             <section>
               <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
-                Squad scores
+                Club scores
               </h4>
               <div className="grid grid-cols-2 gap-2">
                 {memberRatings

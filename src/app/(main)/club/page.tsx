@@ -91,7 +91,8 @@ export default function ClubPage() {
         .select("*, profile:profiles(*)")
         .eq("club_id", clubId)
         .in("kind", ["review", "reread"])
-        .not("rating", "is", null),
+        .not("rating", "is", null)
+        .order("created_at", { ascending: false }),
     ]);
 
     if (clubRes.data) setClub(clubRes.data);
@@ -132,6 +133,8 @@ export default function ClubPage() {
     bookId: string,
     memberList: any[]
   ): { memberRatings: MemberRating[]; avgRating: number | null } {
+    // allRatings is ordered by created_at desc, so the first match per user is
+    // the most recent rating — find() naturally picks the right one.
     const bookRatings = allRatings.filter((r) => r.book_id === bookId);
 
     const memberRatings: MemberRating[] = memberList.map((m: any) => {
@@ -139,7 +142,7 @@ export default function ClubPage() {
       return {
         user_id: m.user_id,
         display_name: (m.profile as any)?.display_name || "?",
-        rating: log?.rating || null,
+        rating: log?.rating ?? null,
         review: log?.review || null,
       };
     });

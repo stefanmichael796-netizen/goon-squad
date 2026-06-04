@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { Loading } from "@/components/ui/loading";
 import { ClubBookSheet } from "@/components/shared/club-book-sheet";
-import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles } from "lucide-react";
+import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles, Plus } from "lucide-react";
 import Link from "next/link";
 import type { Club, ClubMember, ClubBook, Profile, GoogleBooksVolume } from "@/lib/types";
 
@@ -35,6 +35,7 @@ export default function ClubPage() {
   const [copied, setCopied] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [pickBookOpen, setPickBookOpen] = useState(false);
+  const [pickMode, setPickMode] = useState<"current" | "past">("current");
   const [pickQuery, setPickQuery] = useState("");
   const [pickResults, setPickResults] = useState<GoogleBooksVolume[]>([]);
   const [pickSearching, setPickSearching] = useState(false);
@@ -258,13 +259,23 @@ export default function ClubPage() {
     setPickSearching(false);
   }
 
+  function openPicker(mode: "current" | "past") {
+    setPickMode(mode);
+    setPickQuery("");
+    setPickResults([]);
+    setPickBookOpen(true);
+  }
+
   async function handlePickBook(vol: GoogleBooksVolume) {
     setPickSaving(true);
     try {
       await fetch("/api/club", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "set_current_book", googleBooksVolume: vol }),
+        body: JSON.stringify({
+          action: pickMode === "past" ? "add_past_book" : "set_current_book",
+          googleBooksVolume: vol,
+        }),
       });
       setPickBookOpen(false);
       setPickQuery("");
@@ -404,7 +415,7 @@ export default function ClubPage() {
                 value={pickQuery}
                 onChange={(e) => handlePickSearch(e.target.value)}
                 autoFocus
-                placeholder="Search a book for the club"
+                placeholder={pickMode === "past" ? "Search a book you've read" : "Search a book for the club"}
                 className="w-full pl-9 pr-9 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/50"
               />
               {pickSearching && (
@@ -466,7 +477,7 @@ export default function ClubPage() {
               Currently reading
             </h2>
             <button
-              onClick={() => setPickBookOpen(true)}
+              onClick={() => openPicker("current")}
               className="text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
             >
               Change
@@ -552,7 +563,7 @@ export default function ClubPage() {
         <section className="p-6 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-center space-y-3">
           <p className="text-[var(--muted)]">No book picked yet.</p>
           <button
-            onClick={() => setPickBookOpen(true)}
+            onClick={() => openPicker("current")}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-coral text-white text-sm font-medium transition-opacity hover:opacity-90"
           >
             <BookOpen className="w-4 h-4" /> Pick a book
@@ -561,12 +572,20 @@ export default function ClubPage() {
       )}
 
       {/* Past picks — 3-column cover grid */}
-      {pastBooksWithRatings.length > 0 && (
-        <section>
-          <h2 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-3">
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
             The shelf
           </h2>
+          <button
+            onClick={() => openPicker("past")}
+            className="text-xs text-coral font-medium flex items-center gap-1 hover:underline"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add a book
+          </button>
+        </div>
 
+        {pastBooksWithRatings.length > 0 ? (
           <div className="grid grid-cols-3 gap-3">
             {pastBooksWithRatings.map((item) => {
               const book = item.clubBook.book as any;
@@ -595,8 +614,12 @@ export default function ClubPage() {
               );
             })}
           </div>
-        </section>
-      )}
+        ) : (
+          <p className="text-sm text-[var(--muted)] italic">
+            No books on the shelf yet. Add one you&apos;ve read.
+          </p>
+        )}
+      </section>
 
       {/* Invite button */}
       <button

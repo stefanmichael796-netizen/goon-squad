@@ -133,6 +133,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, bookId });
   }
 
+  if (action === "remove_from_shelf") {
+    const { clubBookId } = body;
+
+    if (!clubBookId) {
+      return NextResponse.json({ error: "Missing clubBookId" }, { status: 400 });
+    }
+
+    const { error } = await supabase
+      .from("club_books")
+      .delete()
+      .eq("id", clubBookId);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  }
+
   if (action === "add_past_book") {
     const { googleBooksVolume } = body as { googleBooksVolume: GoogleBooksVolume };
 

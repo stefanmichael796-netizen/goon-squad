@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { StarRating } from "@/components/ui/star-rating";
-import { X, MessageCircle, Plus, Loader2, Sparkles } from "lucide-react";
+import { X, MessageCircle, Plus, Loader2, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 interface MemberRating {
@@ -66,6 +66,8 @@ export function ClubBookSheet({
   const [newQuotePage, setNewQuotePage] = useState("");
   const [addingQuote, setAddingQuote] = useState(false);
   const [savingQuote, setSavingQuote] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   const supabase = createClient();
 
@@ -164,6 +166,24 @@ export function ClubBookSheet({
     onUpdate();
   }
 
+  async function removeFromShelf() {
+    if (!clubBookId) return;
+    setRemoving(true);
+    try {
+      const res = await fetch("/api/club", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "remove_from_shelf", clubBookId }),
+      });
+      if (res.ok) {
+        onUpdate();
+        onClose();
+      }
+    } catch {}
+    setRemoving(false);
+    setConfirmRemove(false);
+  }
+
   useEffect(() => {
     if (open) {
       setDateRead(endedOn || "");
@@ -173,6 +193,7 @@ export function ClubBookSheet({
       setNewQuotePage("");
       setOverview(null);
       setOverviewError(null);
+      setConfirmRemove(false);
       loadQuotes();
       loadMyRating();
       if (clubBookId) loadOverview(clubBookId);
@@ -458,6 +479,36 @@ export function ClubBookSheet({
             >
               <MessageCircle className="w-4 h-4" /> Open discussion
             </Link>
+          )}
+
+          {/* Remove from shelf */}
+          {clubBookId && (
+            <div className="pt-2">
+              {confirmRemove ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={removeFromShelf}
+                    disabled={removing}
+                    className="flex-1 py-2 rounded-lg bg-red-500 text-white text-sm font-medium disabled:opacity-50"
+                  >
+                    {removing ? "Removing…" : "Yes, remove"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmRemove(false)}
+                    className="flex-1 py-2 rounded-lg border border-[var(--border)] text-sm text-[var(--foreground)]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmRemove(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2 text-sm text-red-500 hover:text-red-400 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" /> Remove from shelf
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

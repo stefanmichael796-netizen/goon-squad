@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { Loading } from "@/components/ui/loading";
 import { ClubBookSheet } from "@/components/shared/club-book-sheet";
-import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles, Plus } from "lucide-react";
+import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles, Plus, Camera } from "lucide-react";
 import Link from "next/link";
 import type { Club, ClubMember, ClubBook, Profile, GoogleBooksVolume } from "@/lib/types";
 
@@ -41,6 +41,8 @@ export default function ClubPage() {
   const [pickSearching, setPickSearching] = useState(false);
   const [pickSaving, setPickSaving] = useState(false);
   const [selectedBook, setSelectedBook] = useState<BookWithRatings | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [clubAction, setClubAction] = useState<"create" | "join">("create");
   const [clubName, setClubName] = useState("");
@@ -285,6 +287,49 @@ export default function ClubPage() {
     setPickSaving(false);
   }
 
+  // Resize the picked image in the browser and store it as a small data-URL on
+  // the club row — no Supabase Storage bucket needed.
+  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !club) return;
+    setLogoUploading(true);
+    try {
+      const dataUrl = await resizeImage(file, 320);
+      const { error } = await supabase
+        .from("clubs")
+        .update({ logo_url: dataUrl })
+        .eq("id", club.id);
+      if (!error) setClub({ ...club, logo_url: dataUrl });
+    } catch {}
+    setLogoUploading(false);
+  }
+
+  function resizeImage(file: File, maxSize: number): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return reject(new Error("no ctx"));
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.8));
+        };
+        img.onerror = reject;
+        img.src = reader.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
   if (loading) return <Loading />;
 
   if (!club) {
@@ -395,13 +440,44 @@ export default function ClubPage() {
   return (
     <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6">
       {/* Club header */}
-      <div>
-        <h1 className="font-serif font-bold text-2xl text-[var(--foreground)]">
-          {club.name}
-        </h1>
-        {club.description && (
-          <p className="text-sm text-[var(--muted)] mt-0.5">{club.description}</p>
-        )}
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={() => logoInputRef.current?.click()}
+          className="relative flex-shrink-0 w-16 h-16 rounded-full overflow-hidden bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center group"
+          aria-label="Change club photo"
+        >
+          {club.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={club.logo_url} alt={club.name} className="w-full h-full object-cover" />
+          ) : (
+            <Camera className="w-5 h-5 text-[var(--muted)]" />
+          )}
+          {logoUploading ? (
+            <span className="absolute inset-0 flex items-center justify-center bg-black/40">
+              <Loader2 className="w-5 h-5 text-white animate-spin" />
+            </span>
+          ) : (
+            <span className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <Camera className="w-5 h-5 text-white" />
+            </span>
+          )}
+        </button>
+        <input
+          ref={logoInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleLogoChange}
+          className="hidden"
+        />
+        <div className="min-w-0">
+          <h1 className="font-serif font-bold text-2xl text-[var(--foreground)] truncate">
+            {club.name}
+          </h1>
+          {club.description && (
+            <p className="text-sm text-[var(--muted)] mt-0.5">{club.description}</p>
+          )}
+        </div>
       </div>
 
       {/* Inline pick-book search — expands in normal flow so it stays visible */}

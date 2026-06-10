@@ -68,6 +68,7 @@ export function ClubBookSheet({
   const [savingQuote, setSavingQuote] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [sheetOpenId, setSheetOpenId] = useState<string | null>(null);
 
   const supabase = createClient();
 
@@ -152,7 +153,21 @@ export function ClubBookSheet({
       .maybeSingle();
 
     if (existing) {
-      await supabase.from("logs").update({ rating: value }).eq("id", existing.id);
+      const { error } = await supabase
+        .from("logs")
+        .update({ rating: value })
+        .eq("id", existing.id);
+
+      if (error) {
+        await supabase.from("logs").insert({
+          user_id: user.id,
+          book_id: bookId,
+          club_id: clubId,
+          club_book_id: clubBookId,
+          kind: "review",
+          rating: value,
+        });
+      }
     } else {
       await supabase.from("logs").insert({
         user_id: user.id,
@@ -186,7 +201,9 @@ export function ClubBookSheet({
   }
 
   useEffect(() => {
-    if (open) {
+    const id = open ? clubBookId : null;
+    if (id && id !== sheetOpenId) {
+      setSheetOpenId(id);
       setDateRead(endedOn || "");
       setMyRating(0);
       setAddingQuote(false);
@@ -197,9 +214,13 @@ export function ClubBookSheet({
       setConfirmRemove(false);
       loadQuotes();
       loadMyRating();
-      if (clubBookId) loadOverview(clubBookId);
+      loadOverview(id);
     }
-  }, [open, endedOn, clubBookId, loadQuotes, loadMyRating, loadOverview]);
+    if (!open && sheetOpenId) {
+      setSheetOpenId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, clubBookId]);
 
   async function saveDateRead(value: string) {
     if (!clubBookId) return;

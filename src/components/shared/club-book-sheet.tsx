@@ -125,6 +125,7 @@ export function ClubBookSheet({
       .eq("user_id", user.id)
       .eq("book_id", bookId)
       .eq("club_id", clubId)
+      .in("kind", ["review", "reread"])
       .not("rating", "is", null)
       .order("created_at", { ascending: false })
       .limit(1)

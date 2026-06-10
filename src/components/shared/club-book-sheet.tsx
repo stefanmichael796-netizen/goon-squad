@@ -141,34 +141,17 @@ export function ClubBookSheet({
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSavingRating(false); return; }
 
-    const { data: existing } = await supabase
+    // Wipe every existing review/reread entry for this book+club, then insert
+    // a fresh one. This avoids silent update failures from stale or duplicate rows.
+    await supabase
       .from("logs")
-      .select("id")
+      .delete()
       .eq("user_id", user.id)
       .eq("book_id", bookId)
       .eq("club_id", clubId)
-      .in("kind", ["review", "reread"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .in("kind", ["review", "reread"]);
 
-    if (existing) {
-      const { error } = await supabase
-        .from("logs")
-        .update({ rating: value })
-        .eq("id", existing.id);
-
-      if (error) {
-        await supabase.from("logs").insert({
-          user_id: user.id,
-          book_id: bookId,
-          club_id: clubId,
-          club_book_id: clubBookId,
-          kind: "review",
-          rating: value,
-        });
-      }
-    } else {
+    if (value > 0) {
       await supabase.from("logs").insert({
         user_id: user.id,
         book_id: bookId,

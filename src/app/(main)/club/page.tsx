@@ -686,6 +686,11 @@ export default function ClubPage() {
                   ) : (
                     <span className="text-xs text-[var(--muted)]">—</span>
                   )}
+                  {(item.clubBook as any).recommended_by && (
+                    <span className="text-[10px] text-[var(--muted)] truncate max-w-full">
+                      {(item.clubBook as any).recommended_by}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -754,6 +759,7 @@ export default function ClubPage() {
         coverUrl={(selectedBook?.clubBook.book as any)?.cover_url || null}
         description={(selectedBook?.clubBook.book as any)?.description || null}
         endedOn={selectedBook?.clubBook.ended_on || null}
+        recommendedBy={(selectedBook?.clubBook as any)?.recommended_by || null}
         avgRating={selectedBook?.avgRating || null}
         memberRatings={selectedBook?.memberRatings || []}
         clubId={club.id}

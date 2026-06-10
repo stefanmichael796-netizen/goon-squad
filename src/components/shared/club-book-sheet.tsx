@@ -33,6 +33,7 @@ interface ClubBookSheetProps {
   coverUrl: string | null;
   description: string | null;
   endedOn: string | null;
+  recommendedBy: string | null;
   avgRating: number | null;
   memberRatings: MemberRating[];
   clubId: string;
@@ -49,6 +50,7 @@ export function ClubBookSheet({
   coverUrl,
   description,
   endedOn,
+  recommendedBy,
   avgRating,
   memberRatings,
   clubId,
@@ -62,6 +64,8 @@ export function ClubBookSheet({
   const [savingRating, setSavingRating] = useState(false);
   const [dateRead, setDateRead] = useState("");
   const [savingDate, setSavingDate] = useState(false);
+  const [recBy, setRecBy] = useState("");
+  const [savingRecBy, setSavingRecBy] = useState(false);
   const [newQuote, setNewQuote] = useState("");
   const [newQuotePage, setNewQuotePage] = useState("");
   const [addingQuote, setAddingQuote] = useState(false);
@@ -188,6 +192,7 @@ export function ClubBookSheet({
     if (id && id !== sheetOpenId) {
       setSheetOpenId(id);
       setDateRead(endedOn || "");
+      setRecBy(recommendedBy || "");
       setMyRating(0);
       setAddingQuote(false);
       setNewQuote("");
@@ -214,6 +219,18 @@ export function ClubBookSheet({
       .update({ ended_on: value || null })
       .eq("id", clubBookId);
     setSavingDate(false);
+    onUpdate();
+  }
+
+  async function saveRecommendedBy(value: string) {
+    if (!clubBookId) return;
+    setRecBy(value);
+    setSavingRecBy(true);
+    await supabase
+      .from("club_books")
+      .update({ recommended_by: value || null })
+      .eq("id", clubBookId);
+    setSavingRecBy(false);
     onUpdate();
   }
 
@@ -312,6 +329,24 @@ export function ClubBookSheet({
               value={dateRead}
               max={new Date().toISOString().split("T")[0]}
               onChange={(e) => saveDateRead(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-coral/30"
+            />
+          </section>
+
+          {/* Recommended by */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                Recommended by
+              </h4>
+              {savingRecBy && <span className="text-xs text-[var(--muted)]">Saving…</span>}
+            </div>
+            <input
+              type="text"
+              value={recBy}
+              onChange={(e) => setRecBy(e.target.value)}
+              onBlur={() => saveRecommendedBy(recBy)}
+              placeholder="Who picked this book?"
               className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-coral/30"
             />
           </section>

@@ -6,7 +6,7 @@ import { Users, BookMarked } from "lucide-react";
 
 const tabs = [
   { href: "/club", label: "Club", icon: Users },
-  { href: "/personal", label: "Mine", icon: BookMarked },
+  { href: "/personal", label: "Personal", icon: BookMarked },
 ];
 
 export function BottomNav() {

@@ -31,6 +31,8 @@ export default function ClubPage() {
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [overviewTried, setOverviewTried] = useState<string | null>(null);
+  const [currentBookNotes, setCurrentBookNotes] = useState("");
+  const [savingCurrentNotes, setSavingCurrentNotes] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -197,6 +199,51 @@ export default function ClubPage() {
       loadOverview(currentBook.id);
     }
   }, [currentBook, overview, overviewLoading, overviewError, overviewTried, loadOverview]);
+
+  useEffect(() => {
+    if (!currentBook || !club) { setCurrentBookNotes(""); return; }
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("logs")
+        .select("review")
+        .eq("user_id", user.id)
+        .eq("book_id", currentBook.book_id)
+        .eq("club_id", club.id)
+        .eq("kind", "note")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setCurrentBookNotes(data?.review ?? "");
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBook?.id, club?.id]);
+
+  async function saveCurrentBookNotes() {
+    if (!currentBook || !club) return;
+    setSavingCurrentNotes(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSavingCurrentNotes(false); return; }
+    await supabase
+      .from("logs")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("book_id", currentBook.book_id)
+      .eq("club_id", club.id)
+      .eq("kind", "note");
+    if (currentBookNotes.trim()) {
+      await supabase.from("logs").insert({
+        user_id: user.id,
+        book_id: currentBook.book_id,
+        club_id: club.id,
+        club_book_id: currentBook.id,
+        kind: "note",
+        review: currentBookNotes.trim(),
+      });
+    }
+    setSavingCurrentNotes(false);
+  }
 
   function copyInviteCode() {
     if (!club) return;
@@ -625,6 +672,25 @@ export default function ClubPage() {
                 <Loader2 className="w-4 h-4 animate-spin" /> Writing an overview…
               </div>
             )}
+
+            {/* Personal notes */}
+            <section className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                  My notes
+                </h4>
+                {savingCurrentNotes && <span className="text-xs text-[var(--muted)]">Saving…</span>}
+              </div>
+              <textarea
+                value={currentBookNotes}
+                onChange={(e) => setCurrentBookNotes(e.target.value)}
+                onBlur={saveCurrentBookNotes}
+                placeholder="Thoughts, themes, things to remember…"
+                rows={3}
+                className="w-full px-3 py-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] text-sm font-serif focus:outline-none focus:ring-2 focus:ring-coral/30 resize-none"
+              />
+              <p className="text-[10px] text-[var(--muted)] italic mt-1">Only you can see this</p>
+            </section>
 
             <Link
               href={`/club/discussion/${currentBook.id}`}

@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { Loading } from "@/components/ui/loading";
 import { PersonalBookSheet } from "@/components/shared/personal-book-sheet";
-import { Search, Loader2, BookOpen, Plus, LogOut } from "lucide-react";
+import { Search, Loader2, BookOpen, Plus, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Profile, UserBook, GoogleBooksVolume } from "@/lib/types";
@@ -24,6 +24,9 @@ export default function PersonalPage() {
   const [pickSearching, setPickSearching] = useState(false);
   const [pickSaving, setPickSaving] = useState(false);
   const [selected, setSelected] = useState<UserBook | null>(null);
+  const [readingNotes, setReadingNotes] = useState<Record<string, string>>({});
+  const [savingReadingNote, setSavingReadingNote] = useState<string | null>(null);
+  const overviewTriedRef = useRef<Set<string>>(new Set());
 
   const supabase = createClient();
   const router = useRouter();
@@ -80,6 +83,90 @@ export default function PersonalPage() {
   }, [supabase]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  const readingIds = reading.map(r => r.book_id).join(",");
+
+  useEffect(() => {
+    if (!readingIds) return;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const bookIds = readingIds.split(",");
+      const results = await Promise.all(
+        bookIds.map(bookId =>
+          supabase
+            .from("logs")
+            .select("review")
+            .eq("user_id", user.id)
+            .eq("book_id", bookId)
+            .is("club_id", null)
+            .eq("kind", "note")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        )
+      );
+      const notes: Record<string, string> = {};
+      bookIds.forEach((id, i) => {
+        notes[id] = results[i].data?.review ?? "";
+      });
+      setReadingNotes(notes);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readingIds]);
+
+  useEffect(() => {
+    for (const ub of reading) {
+      const book = ub.book as any;
+      if (!book?.ai_synopsis && !overviewTriedRef.current.has(ub.book_id)) {
+        overviewTriedRef.current.add(ub.book_id);
+        fetch("/api/club/overview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookId: ub.book_id }),
+        }).then((res) => {
+          if (res.ok) loadData();
+        });
+      }
+    }
+  }, [reading, loadData]);
+
+  async function saveReadingNote(bookId: string) {
+    setSavingReadingNote(bookId);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSavingReadingNote(null); return; }
+    await supabase
+      .from("logs")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("book_id", bookId)
+      .is("club_id", null)
+      .eq("kind", "note");
+    const noteText = readingNotes[bookId]?.trim();
+    if (noteText) {
+      await supabase.from("logs").insert({
+        user_id: user.id,
+        book_id: bookId,
+        kind: "note",
+        review: noteText,
+      });
+    }
+    setSavingReadingNote(null);
+  }
+
+  async function moveFavourite(index: number, direction: -1 | 1) {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= favourites.length) return;
+    const a = favourites[index];
+    const b = favourites[targetIndex];
+    const aRank = a.favourite_rank;
+    const bRank = b.favourite_rank;
+    await Promise.all([
+      supabase.from("user_books").update({ favourite_rank: bRank }).eq("id", a.id),
+      supabase.from("user_books").update({ favourite_rank: aRank }).eq("id", b.id),
+    ]);
+    loadData();
+  }
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -155,18 +242,37 @@ export default function PersonalPage() {
             const fav = favourites[i];
             if (fav?.book) {
               return (
-                <button
-                  key={fav.id}
-                  onClick={() => setSelected(fav)}
-                  className="group"
-                >
-                  <BookCover
-                    coverUrl={(fav.book as any).cover_url}
-                    title={(fav.book as any).title}
-                    size="md"
-                    className="w-full h-auto aspect-[2/3] transition-transform group-hover:-translate-y-0.5"
-                  />
-                </button>
+                <div key={fav.id} className="flex flex-col items-center gap-1">
+                  <button
+                    onClick={() => setSelected(fav)}
+                    className="group w-full"
+                  >
+                    <BookCover
+                      coverUrl={(fav.book as any).cover_url}
+                      title={(fav.book as any).title}
+                      size="md"
+                      className="w-full h-auto aspect-[2/3] transition-transform group-hover:-translate-y-0.5"
+                    />
+                  </button>
+                  {favourites.length > 1 && (
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => moveFavourite(i, -1)}
+                        disabled={i === 0}
+                        className="p-0.5 text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-20 transition-colors"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => moveFavourite(i, 1)}
+                        disabled={i >= favourites.length - 1}
+                        className="p-0.5 text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-20 transition-colors"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
               );
             }
             return (
@@ -180,7 +286,7 @@ export default function PersonalPage() {
           })}
         </div>
         <p className="text-[10px] text-[var(--muted)] italic mt-1.5">
-          Star a book to add it to your Top 5.
+          Star a book to add it to your Top 5. Use arrows to reorder.
         </p>
       </section>
 
@@ -268,30 +374,70 @@ export default function PersonalPage() {
             {reading.map((ub) => {
               const book = ub.book as any;
               return (
-                <button
-                  key={ub.id}
-                  onClick={() => setSelected(ub)}
-                  className="w-full flex gap-4 p-4 text-left hover:bg-[var(--background)]/40 transition-colors"
-                >
-                  <BookCover coverUrl={book?.cover_url} title={book?.title || ""} size="md" />
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-serif font-semibold text-[var(--foreground)] leading-tight">
-                      {book?.title}
-                    </h3>
-                    <p className="text-sm text-[var(--muted)]">{book?.authors?.join(", ")}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="flex-1 h-1.5 rounded-full bg-[var(--border)]">
-                        <div
-                          className="h-full rounded-full bg-coral transition-all"
-                          style={{ width: `${ub.progress_pct || 0}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-[var(--muted)]">
-                        {Math.round(ub.progress_pct || 0)}%
-                      </span>
+                <div key={ub.id} className="p-4">
+                  <div className="flex gap-4">
+                    <button onClick={() => setSelected(ub)}>
+                      <BookCover coverUrl={book?.cover_url} title={book?.title || ""} size="lg" />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <button onClick={() => setSelected(ub)} className="text-left">
+                        <h3 className="font-serif font-semibold text-lg text-[var(--foreground)] leading-tight">
+                          {book?.title}
+                        </h3>
+                      </button>
+                      <p className="text-sm text-[var(--muted)]">{book?.authors?.join(", ")}</p>
+                      {book?.page_count && (
+                        <p className="text-xs text-[var(--muted)] mt-1">{book.page_count} pages</p>
+                      )}
                     </div>
                   </div>
-                </button>
+
+                  {book?.ai_synopsis ? (
+                    <div className="mt-4 space-y-4">
+                      <div>
+                        <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-1.5">
+                          Synopsis
+                        </h4>
+                        <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed">
+                          {book.ai_synopsis}
+                        </p>
+                      </div>
+                      {book.ai_characters && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-1.5">
+                            Who&apos;s who
+                          </h4>
+                          <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed whitespace-pre-wrap">
+                            {book.ai_characters}
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-[10px] text-[var(--muted)] italic">AI-generated</p>
+                    </div>
+                  ) : (
+                    <div className="mt-4 flex items-center gap-2 text-sm text-[var(--muted)]">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Writing an overview…
+                    </div>
+                  )}
+
+                  <section className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                        My notes
+                      </h4>
+                      {savingReadingNote === ub.book_id && <span className="text-xs text-[var(--muted)]">Saving…</span>}
+                    </div>
+                    <textarea
+                      value={readingNotes[ub.book_id] || ""}
+                      onChange={(e) => setReadingNotes(prev => ({ ...prev, [ub.book_id]: e.target.value }))}
+                      onBlur={() => saveReadingNote(ub.book_id)}
+                      placeholder="Thoughts, themes, things to remember…"
+                      rows={3}
+                      className="w-full px-3 py-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] text-sm font-serif focus:outline-none focus:ring-2 focus:ring-coral/30 resize-none"
+                    />
+                    <p className="text-[10px] text-[var(--muted)] italic mt-1">Only you can see this</p>
+                  </section>
+                </div>
               );
             })}
           </div>

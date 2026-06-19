@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { Loading } from "@/components/ui/loading";
 import { PersonalBookSheet } from "@/components/shared/personal-book-sheet";
-import { Search, Loader2, BookOpen, Plus, LogOut, ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
+import { Search, Loader2, BookOpen, Plus, LogOut, ChevronLeft, ChevronRight, CheckCircle2, RotateCw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Profile, UserBook, GoogleBooksVolume } from "@/lib/types";
@@ -16,6 +16,7 @@ export default function PersonalPage() {
   const [reading, setReading] = useState<UserBook[]>([]);
   const [readBooks, setReadBooks] = useState<UserBook[]>([]);
   const [ratings, setRatings] = useState<Record<string, number>>({});
+  const [rereadCounts, setRereadCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [pickOpen, setPickOpen] = useState(false);
   const [pickMode, setPickMode] = useState<"reading" | "read">("read");
@@ -36,7 +37,7 @@ export default function PersonalPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const [profileRes, favRes, readingRes, readRes, ratingsRes] = await Promise.all([
+    const [profileRes, favRes, readingRes, readRes, ratingsRes, rereadsRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user.id).single(),
       supabase
         .from("user_books")
@@ -61,10 +62,22 @@ export default function PersonalPage() {
         .select("book_id, rating")
         .eq("user_id", user.id)
         .is("club_id", null)
-        .in("kind", ["review", "reread"])
+        .eq("kind", "review")
         .not("rating", "is", null)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("logs")
+        .select("book_id")
+        .eq("user_id", user.id)
+        .is("club_id", null)
+        .eq("kind", "reread"),
     ]);
+
+    const rereadMap: Record<string, number> = {};
+    (rereadsRes.data || []).forEach((r: any) => {
+      rereadMap[r.book_id] = (rereadMap[r.book_id] || 0) + 1;
+    });
+    setRereadCounts(rereadMap);
 
     if (profileRes.data) setProfile(profileRes.data);
     if (favRes.data) setFavourites(favRes.data as any);
@@ -514,11 +527,19 @@ export default function PersonalPage() {
                       className="w-full h-auto aspect-[2/3]"
                     />
                   </div>
-                  {rating !== undefined ? (
-                    <span className="text-sm font-bold text-[var(--foreground)]">{rating}</span>
-                  ) : (
-                    <span className="text-xs text-[var(--muted)]">—</span>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {rating !== undefined ? (
+                      <span className="text-sm font-bold text-[var(--foreground)]">{rating}</span>
+                    ) : (
+                      <span className="text-xs text-[var(--muted)]">—</span>
+                    )}
+                    {rereadCounts[ub.book_id] > 0 && (
+                      <span className="flex items-center gap-0.5 text-[10px] text-[var(--muted)]" title="Reread">
+                        <RotateCw className="w-3 h-3" />
+                        {rereadCounts[ub.book_id]}
+                      </span>
+                    )}
+                  </div>
                 </button>
               );
             })}

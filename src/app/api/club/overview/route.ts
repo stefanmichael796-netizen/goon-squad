@@ -42,7 +42,9 @@ export async function POST(request: Request) {
   }
 
   // Return the cached overview unless a refresh was explicitly requested.
-  if (!refresh && (clubBook as any).ai_synopsis && (clubBook as any).ai_characters) {
+  // Require ai_quotes too, so older books (synopsis/characters only) regenerate
+  // and pick up quotes.
+  if (!refresh && (clubBook as any).ai_synopsis && (clubBook as any).ai_characters && (clubBook as any).ai_quotes) {
     return NextResponse.json({
       synopsis: (clubBook as any).ai_synopsis,
       characters: (clubBook as any).ai_characters,

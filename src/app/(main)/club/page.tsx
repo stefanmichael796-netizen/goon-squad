@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { Loading } from "@/components/ui/loading";
 import { ClubBookSheet } from "@/components/shared/club-book-sheet";
-import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles, Plus, Camera } from "lucide-react";
+import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles, Plus, Camera, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import type { Club, ClubMember, ClubBook, Profile, GoogleBooksVolume } from "@/lib/types";
 
@@ -33,6 +33,7 @@ export default function ClubPage() {
   const [overviewTried, setOverviewTried] = useState<string | null>(null);
   const [currentBookNotes, setCurrentBookNotes] = useState("");
   const [savingCurrentNotes, setSavingCurrentNotes] = useState(false);
+  const [finishingCurrent, setFinishingCurrent] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -243,6 +244,19 @@ export default function ClubPage() {
       });
     }
     setSavingCurrentNotes(false);
+  }
+
+  async function finishCurrentBook() {
+    setFinishingCurrent(true);
+    try {
+      await fetch("/api/club", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "finish_current_book" }),
+      });
+      await loadData();
+    } catch {}
+    setFinishingCurrent(false);
   }
 
   function copyInviteCode() {
@@ -692,12 +706,26 @@ export default function ClubPage() {
               <p className="text-[10px] text-[var(--muted)] italic mt-1">Only you can see this</p>
             </section>
 
-            <Link
-              href={`/club/discussion/${currentBook.id}`}
-              className="mt-4 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-coral text-white text-sm font-medium transition-opacity hover:opacity-90"
-            >
-              <MessageCircle className="w-4 h-4" /> Discussion
-            </Link>
+            <div className="mt-4 flex gap-2">
+              <Link
+                href={`/club/discussion/${currentBook.id}`}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-coral text-white text-sm font-medium transition-opacity hover:opacity-90"
+              >
+                <MessageCircle className="w-4 h-4" /> Discussion
+              </Link>
+              <button
+                onClick={finishCurrentBook}
+                disabled={finishingCurrent}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border border-[var(--border)] text-[var(--foreground)] text-sm font-medium transition-colors hover:bg-[var(--background)] disabled:opacity-50"
+              >
+                {finishingCurrent ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                Mark finished
+              </button>
+            </div>
           </div>
         </section>
       )}

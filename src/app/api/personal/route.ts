@@ -86,6 +86,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, bookId, userBookId: inserted.id });
   }
 
+  if (action === "finish_book") {
+    const { userBookId } = body;
+    if (!userBookId) {
+      return NextResponse.json({ error: "Missing userBookId" }, { status: 400 });
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+    const { error } = await supabase
+      .from("user_books")
+      .update({
+        shelf: "read",
+        finished_at: today,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userBookId)
+      .eq("user_id", user.id);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  }
+
   if (action === "remove_book") {
     const { userBookId } = body;
     if (!userBookId) {

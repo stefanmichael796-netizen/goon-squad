@@ -133,6 +133,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, bookId });
   }
 
+  if (action === "finish_current_book") {
+    const { data: membership } = await supabase
+      .from("club_members")
+      .select("club_id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .single();
+
+    if (!membership) {
+      return NextResponse.json({ error: "You're not in a club" }, { status: 403 });
+    }
+
+    const { error } = await supabase
+      .from("club_books")
+      .update({ status: "past", ended_on: new Date().toISOString().split("T")[0] })
+      .eq("club_id", membership.club_id)
+      .eq("status", "current");
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  }
+
   if (action === "remove_from_shelf") {
     const { clubBookId } = body;
 

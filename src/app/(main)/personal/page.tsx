@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { Loading } from "@/components/ui/loading";
 import { PersonalBookSheet } from "@/components/shared/personal-book-sheet";
-import { Search, Loader2, BookOpen, Plus, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Loader2, BookOpen, Plus, LogOut, ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Profile, UserBook, GoogleBooksVolume } from "@/lib/types";
@@ -26,6 +26,7 @@ export default function PersonalPage() {
   const [selected, setSelected] = useState<UserBook | null>(null);
   const [readingNotes, setReadingNotes] = useState<Record<string, string>>({});
   const [savingReadingNote, setSavingReadingNote] = useState<string | null>(null);
+  const [finishingId, setFinishingId] = useState<string | null>(null);
   const overviewTriedRef = useRef<Set<string>>(new Set());
 
   const supabase = createClient();
@@ -152,6 +153,19 @@ export default function PersonalPage() {
       });
     }
     setSavingReadingNote(null);
+  }
+
+  async function finishReadingBook(userBookId: string) {
+    setFinishingId(userBookId);
+    try {
+      await fetch("/api/personal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "finish_book", userBookId }),
+      });
+      await loadData();
+    } catch {}
+    setFinishingId(null);
   }
 
   async function moveFavourite(index: number, direction: -1 | 1) {
@@ -437,6 +451,19 @@ export default function PersonalPage() {
                     />
                     <p className="text-[10px] text-[var(--muted)] italic mt-1">Only you can see this</p>
                   </section>
+
+                  <button
+                    onClick={() => finishReadingBook(ub.id)}
+                    disabled={finishingId === ub.id}
+                    className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-coral text-white text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    {finishingId === ub.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4" />
+                    )}
+                    Mark as finished
+                  </button>
                 </div>
               );
             })}

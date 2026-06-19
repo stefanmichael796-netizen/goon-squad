@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { StarRating } from "@/components/ui/star-rating";
-import { X, MessageCircle, Plus, Loader2, Sparkles, Trash2, RotateCw } from "lucide-react";
+import { X, MessageCircle, Plus, Loader2, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 interface MemberRating {
@@ -75,11 +75,6 @@ export function ClubBookSheet({
   const [sheetOpenId, setSheetOpenId] = useState<string | null>(null);
   const [personalNotes, setPersonalNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
-  const [rereads, setRereads] = useState<{ id: string; created_at: string; rating: number | null }[]>([]);
-  const [loggingReread, setLoggingReread] = useState(false);
-  const [rereadDate, setRereadDate] = useState("");
-  const [rereadRating, setRereadRating] = useState(0);
-  const [savingReread, setSavingReread] = useState(false);
 
   const supabase = createClient();
 
@@ -137,56 +132,13 @@ export function ClubBookSheet({
       .eq("user_id", user.id)
       .eq("book_id", bookId)
       .eq("club_id", clubId)
-      .eq("kind", "review")
+      .in("kind", ["review", "reread"])
       .not("rating", "is", null)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     setMyRating(data?.rating ?? 0);
   }, [bookId, clubId, supabase]);
-
-  const loadRereads = useCallback(async () => {
-    if (!bookId || !clubId) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data } = await supabase
-      .from("logs")
-      .select("id, created_at, rating")
-      .eq("user_id", user.id)
-      .eq("book_id", bookId)
-      .eq("club_id", clubId)
-      .eq("kind", "reread")
-      .order("created_at", { ascending: false });
-    if (data) setRereads(data);
-  }, [bookId, clubId, supabase]);
-
-  async function addReread() {
-    if (!bookId || !clubId) return;
-    setSavingReread(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSavingReread(false); return; }
-    await supabase.from("logs").insert({
-      user_id: user.id,
-      book_id: bookId,
-      club_id: clubId,
-      club_book_id: clubBookId,
-      kind: "reread",
-      rating: rereadRating > 0 ? rereadRating : null,
-      ...(rereadDate ? { created_at: new Date(rereadDate + "T12:00:00").toISOString() } : {}),
-    });
-    setLoggingReread(false);
-    setRereadDate("");
-    setRereadRating(0);
-    setSavingReread(false);
-    loadRereads();
-    onUpdate();
-  }
-
-  async function deleteReread(id: string) {
-    await supabase.from("logs").delete().eq("id", id);
-    loadRereads();
-    onUpdate();
-  }
 
   const loadPersonalNotes = useCallback(async () => {
     if (!bookId || !clubId) return;
@@ -247,7 +199,7 @@ export function ClubBookSheet({
       .eq("user_id", user.id)
       .eq("book_id", bookId)
       .eq("club_id", clubId)
-      .eq("kind", "review");
+      .in("kind", ["review", "reread"]);
 
     if (value > 0) {
       await supabase.from("logs").insert({
@@ -295,14 +247,9 @@ export function ClubBookSheet({
       setOverviewError(null);
       setConfirmRemove(false);
       setPersonalNotes("");
-      setLoggingReread(false);
-      setRereadDate("");
-      setRereadRating(0);
-      setRereads([]);
       loadQuotes();
       loadMyRating();
       loadPersonalNotes();
-      loadRereads();
       loadOverview(id);
     }
     if (!open && sheetOpenId) {
@@ -432,87 +379,6 @@ export function ClubBookSheet({
               onChange={(e) => saveDateRead(e.target.value)}
               className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-coral/30"
             />
-          </section>
-
-          {/* Rereads */}
-          <section>
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider flex items-center gap-1.5">
-                <RotateCw className="w-3.5 h-3.5" /> Rereads
-              </h4>
-              {!loggingReread && (
-                <button
-                  onClick={() => { setLoggingReread(true); setRereadDate(new Date().toISOString().split("T")[0]); }}
-                  className="text-xs text-coral hover:underline flex items-center gap-0.5"
-                >
-                  <Plus className="w-3 h-3" /> Log a reread
-                </button>
-              )}
-            </div>
-
-            {loggingReread && (
-              <div className="space-y-2 mb-3 p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
-                <div>
-                  <label className="text-xs text-[var(--muted)]">When</label>
-                  <input
-                    type="date"
-                    value={rereadDate}
-                    max={new Date().toISOString().split("T")[0]}
-                    onChange={(e) => setRereadDate(e.target.value)}
-                    className="mt-1 w-full px-3 py-2 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-coral/30"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-[var(--muted)]">Rating this time (optional)</label>
-                  <div className="mt-1">
-                    <StarRating rating={rereadRating} onChange={setRereadRating} size="md" />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={addReread}
-                    disabled={savingReread}
-                    className="flex-1 py-1.5 rounded-lg bg-coral text-white text-sm font-medium disabled:opacity-50"
-                  >
-                    {savingReread ? "Saving…" : "Save reread"}
-                  </button>
-                  <button
-                    onClick={() => { setLoggingReread(false); setRereadDate(""); setRereadRating(0); }}
-                    className="flex-1 py-1.5 rounded-lg border border-[var(--border)] text-sm text-[var(--foreground)]"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {rereads.length === 0 && !loggingReread ? (
-              <p className="text-sm text-[var(--muted)] italic">No rereads logged yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {rereads.map((rr) => (
-                  <div
-                    key={rr.id}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)]"
-                  >
-                    <span className="text-sm text-[var(--foreground)]">
-                      {new Date(rr.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {rr.rating !== null && (
-                        <span className="text-sm font-bold text-[var(--foreground)]">{rr.rating}</span>
-                      )}
-                      <button
-                        onClick={() => deleteReread(rr.id)}
-                        className="text-[var(--muted)] hover:text-red-500 transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </section>
 
           {/* Recommended by */}

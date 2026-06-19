@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { Loading } from "@/components/ui/loading";
 import { ClubBookSheet } from "@/components/shared/club-book-sheet";
-import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles, Plus, Camera, CheckCircle2, RotateCw } from "lucide-react";
+import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles, Plus, Camera, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import type { Club, ClubMember, ClubBook, Profile, GoogleBooksVolume } from "@/lib/types";
 
@@ -27,7 +27,6 @@ export default function ClubPage() {
   const [members, setMembers] = useState<(ClubMember & { profile: Profile })[]>([]);
   const [currentBook, setCurrentBook] = useState<ClubBook | null>(null);
   const [pastBooksWithRatings, setPastBooksWithRatings] = useState<BookWithRatings[]>([]);
-  const [rereadCounts, setRereadCounts] = useState<Record<string, number>>({});
   const [overview, setOverview] = useState<{ synopsis: string; characters: string; quotes: string | null } | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState<string | null>(null);
@@ -75,7 +74,7 @@ export default function ClubPage() {
 
     const clubId = membership.club_id;
 
-    const [clubRes, membersRes, currentBookRes, pastBooksRes, ratingsRes, rereadsRes] = await Promise.all([
+    const [clubRes, membersRes, currentBookRes, pastBooksRes, ratingsRes] = await Promise.all([
       supabase.from("clubs").select("*").eq("id", clubId).single(),
       supabase
         .from("club_members")
@@ -97,22 +96,10 @@ export default function ClubPage() {
         .from("logs")
         .select("*, profile:profiles(*)")
         .eq("club_id", clubId)
-        .eq("kind", "review")
+        .in("kind", ["review", "reread"])
         .not("rating", "is", null)
         .order("created_at", { ascending: false }),
-      supabase
-        .from("logs")
-        .select("book_id")
-        .eq("user_id", user.id)
-        .eq("club_id", clubId)
-        .eq("kind", "reread"),
     ]);
-
-    const rereadMap: Record<string, number> = {};
-    (rereadsRes.data || []).forEach((r: any) => {
-      rereadMap[r.book_id] = (rereadMap[r.book_id] || 0) + 1;
-    });
-    setRereadCounts(rereadMap);
 
     if (clubRes.data) setClub(clubRes.data);
     const memberList = (membersRes.data || []) as any[];
@@ -787,21 +774,13 @@ export default function ClubPage() {
                       className="w-full h-auto aspect-[2/3]"
                     />
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {item.avgRating !== null ? (
-                      <span className="text-sm font-bold text-[var(--foreground)]">
-                        {item.avgRating}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-[var(--muted)]">—</span>
-                    )}
-                    {rereadCounts[item.clubBook.book_id] > 0 && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-[var(--muted)]" title="You've reread this">
-                        <RotateCw className="w-3 h-3" />
-                        {rereadCounts[item.clubBook.book_id]}
-                      </span>
-                    )}
-                  </div>
+                  {item.avgRating !== null ? (
+                    <span className="text-sm font-bold text-[var(--foreground)]">
+                      {item.avgRating}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-[var(--muted)]">—</span>
+                  )}
                   {(item.clubBook as any).recommended_by && (
                     <span className="text-[10px] text-[var(--muted)] truncate max-w-full">
                       {(item.clubBook as any).recommended_by}

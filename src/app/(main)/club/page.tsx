@@ -109,7 +109,8 @@ export default function ClubPage() {
       setCurrentBook(cb);
 
       // Show any cached AI overview immediately; don't auto-spend on generation.
-      if (cb.ai_synopsis && cb.ai_characters) {
+      // Require quotes too, so older books regenerate to pick them up.
+      if (cb.ai_synopsis && cb.ai_characters && cb.ai_quotes) {
         setOverview({ synopsis: cb.ai_synopsis, characters: cb.ai_characters, quotes: cb.ai_quotes || null });
       } else {
         setOverview(null);

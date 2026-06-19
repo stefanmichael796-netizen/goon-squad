@@ -88,7 +88,7 @@ export async function POST(request: Request) {
               },
               quotes: {
                 type: "string",
-                description: "3 memorable, widely-known quotes from the book. Each quote on its own line, prefixed with an em dash (— ). Choose quotes that capture the book's voice and themes without spoiling plot. If you are not confident you can recall exact quotes, return an empty string.",
+                description: "Exactly 3 memorable quotes from the book that capture its voice and themes without spoiling the plot. Each quote on its own line, prefixed with an em dash (— ). Prefer well-known lines. If you genuinely cannot recall verbatim lines, paraphrase a characteristic passage and keep it short — but always provide 3 lines. Only return an empty string if you have never heard of this book at all.",
               },
             },
             required: ["synopsis", "characters", "quotes"],

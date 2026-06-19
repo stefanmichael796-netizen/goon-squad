@@ -73,6 +73,8 @@ export function ClubBookSheet({
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [sheetOpenId, setSheetOpenId] = useState<string | null>(null);
+  const [personalNotes, setPersonalNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
 
   const supabase = createClient();
 
@@ -138,6 +140,50 @@ export function ClubBookSheet({
     setMyRating(data?.rating ?? 0);
   }, [bookId, clubId, supabase]);
 
+  const loadPersonalNotes = useCallback(async () => {
+    if (!bookId || !clubId) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("logs")
+      .select("review")
+      .eq("user_id", user.id)
+      .eq("book_id", bookId)
+      .eq("club_id", clubId)
+      .eq("kind", "note")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setPersonalNotes(data?.review ?? "");
+  }, [bookId, clubId, supabase]);
+
+  async function savePersonalNotes() {
+    if (!bookId || !clubId) return;
+    setSavingNotes(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSavingNotes(false); return; }
+
+    await supabase
+      .from("logs")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("book_id", bookId)
+      .eq("club_id", clubId)
+      .eq("kind", "note");
+
+    if (personalNotes.trim()) {
+      await supabase.from("logs").insert({
+        user_id: user.id,
+        book_id: bookId,
+        club_id: clubId,
+        club_book_id: clubBookId,
+        kind: "note",
+        review: personalNotes.trim(),
+      });
+    }
+    setSavingNotes(false);
+  }
+
   async function saveRating(value: number) {
     if (!bookId || !clubId) return;
     setMyRating(value);
@@ -200,8 +246,10 @@ export function ClubBookSheet({
       setOverview(null);
       setOverviewError(null);
       setConfirmRemove(false);
+      setPersonalNotes("");
       loadQuotes();
       loadMyRating();
+      loadPersonalNotes();
       loadOverview(id);
     }
     if (!open && sheetOpenId) {
@@ -509,6 +557,25 @@ export function ClubBookSheet({
                 ))}
               </div>
             )}
+          </section>
+
+          {/* Personal notes — only visible to the current user */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                My notes
+              </h4>
+              {savingNotes && <span className="text-xs text-[var(--muted)]">Saving…</span>}
+            </div>
+            <textarea
+              value={personalNotes}
+              onChange={(e) => setPersonalNotes(e.target.value)}
+              onBlur={savePersonalNotes}
+              placeholder="Thoughts, themes, things to remember…"
+              rows={3}
+              className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] text-sm font-serif focus:outline-none focus:ring-2 focus:ring-coral/30 resize-none"
+            />
+            <p className="text-[10px] text-[var(--muted)] italic mt-1">Only you can see this</p>
           </section>
 
           {/* Discussion link */}

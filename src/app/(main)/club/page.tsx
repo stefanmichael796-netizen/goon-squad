@@ -27,7 +27,7 @@ export default function ClubPage() {
   const [members, setMembers] = useState<(ClubMember & { profile: Profile })[]>([]);
   const [currentBook, setCurrentBook] = useState<ClubBook | null>(null);
   const [pastBooksWithRatings, setPastBooksWithRatings] = useState<BookWithRatings[]>([]);
-  const [overview, setOverview] = useState<{ synopsis: string; characters: string } | null>(null);
+  const [overview, setOverview] = useState<{ synopsis: string; characters: string; quotes: string | null } | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [overviewTried, setOverviewTried] = useState<string | null>(null);
@@ -110,7 +110,7 @@ export default function ClubPage() {
 
       // Show any cached AI overview immediately; don't auto-spend on generation.
       if (cb.ai_synopsis && cb.ai_characters) {
-        setOverview({ synopsis: cb.ai_synopsis, characters: cb.ai_characters });
+        setOverview({ synopsis: cb.ai_synopsis, characters: cb.ai_characters, quotes: cb.ai_quotes || null });
       } else {
         setOverview(null);
       }
@@ -173,7 +173,7 @@ export default function ClubPage() {
       if (!res.ok) {
         setOverviewError(data.error || "Couldn't generate an overview.");
       } else {
-        setOverview({ synopsis: data.synopsis, characters: data.characters });
+        setOverview({ synopsis: data.synopsis, characters: data.characters, quotes: data.quotes || null });
       }
     } catch {
       setOverviewError("Network error. Try again.");

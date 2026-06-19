@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   // Load the club book + its book, and confirm the user belongs to the club.
   const { data: clubBook } = await supabase
     .from("club_books")
-    .select("id, club_id, ai_synopsis, ai_characters, book:books(title, authors, description)")
+    .select("id, club_id, ai_synopsis, ai_characters, ai_quotes, book:books(title, authors, description)")
     .eq("id", clubBookId)
     .single();
 
@@ -46,6 +46,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       synopsis: (clubBook as any).ai_synopsis,
       characters: (clubBook as any).ai_characters,
+      quotes: (clubBook as any).ai_quotes || null,
       cached: true,
     });
   }
@@ -83,8 +84,12 @@ export async function POST(request: Request) {
                 type: "string",
                 description: "A spoiler-free overview of the main characters. One short line each, formatted as 'Name — one-line description'. Separate each character with a newline. Describe who they are at the start of the story only; reveal no arcs, fates, or twists.",
               },
+              quotes: {
+                type: "string",
+                description: "3 memorable, widely-known quotes from the book. Each quote on its own line, prefixed with an em dash (— ). Choose quotes that capture the book's voice and themes without spoiling plot. If you are not confident you can recall exact quotes, return an empty string.",
+              },
             },
-            required: ["synopsis", "characters"],
+            required: ["synopsis", "characters", "quotes"],
             additionalProperties: false,
           },
         },
@@ -101,21 +106,21 @@ export async function POST(request: Request) {
           role: "user",
           content: `Book: "${title}"${authors.length ? ` by ${authors.join(", ")}` : ""}\n\n${
             description ? `Publisher description (may help, may be marketing fluff):\n${description}` : "No description available."
-          }\n\nWrite a spoiler-free synopsis and a spoiler-free main-character overview for our book club.`,
+          }\n\nWrite a spoiler-free synopsis, a spoiler-free main-character overview, and 3 notable quotes from the book for our book club.`,
         },
       ],
     });
 
     const textBlock = message.content.find((b) => b.type === "text");
     const raw = textBlock && "text" in textBlock ? textBlock.text : "";
-    const parsed = JSON.parse(raw) as { synopsis: string; characters: string };
+    const parsed = JSON.parse(raw) as { synopsis: string; characters: string; quotes: string };
 
     await supabase
       .from("club_books")
-      .update({ ai_synopsis: parsed.synopsis, ai_characters: parsed.characters })
+      .update({ ai_synopsis: parsed.synopsis, ai_characters: parsed.characters, ai_quotes: parsed.quotes || null })
       .eq("id", clubBookId);
 
-    return NextResponse.json({ synopsis: parsed.synopsis, characters: parsed.characters, cached: false });
+    return NextResponse.json({ synopsis: parsed.synopsis, characters: parsed.characters, quotes: parsed.quotes || null, cached: false });
   } catch (err: any) {
     const status = err?.status === 401 ? 401 : 500;
     return NextResponse.json(

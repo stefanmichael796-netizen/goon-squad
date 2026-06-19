@@ -57,7 +57,7 @@ export function ClubBookSheet({
   onUpdate,
 }: ClubBookSheetProps) {
   const [quotes, setQuotes] = useState<ClubQuote[]>([]);
-  const [overview, setOverview] = useState<{ synopsis: string; characters: string } | null>(null);
+  const [overview, setOverview] = useState<{ synopsis: string; characters: string; quotes: string | null } | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [myRating, setMyRating] = useState(0);
@@ -114,7 +114,7 @@ export function ClubBookSheet({
       if (!res.ok) {
         setOverviewError(data.error || "Couldn't generate an overview.");
       } else {
-        setOverview({ synopsis: data.synopsis, characters: data.characters });
+        setOverview({ synopsis: data.synopsis, characters: data.characters, quotes: data.quotes || null });
       }
     } catch {
       setOverviewError("Network error. Try again.");
@@ -448,6 +448,20 @@ export function ClubBookSheet({
                   <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed whitespace-pre-wrap">
                     {overview.characters}
                   </p>
+                </section>
+              )}
+              {overview.quotes && (
+                <section>
+                  <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
+                    Notable quotes
+                  </h4>
+                  <div className="space-y-2">
+                    {overview.quotes.split("\n").filter(Boolean).map((q, i) => (
+                      <blockquote key={i} className="font-serif italic text-sm text-[var(--foreground)] leading-relaxed pl-3 border-l-2 border-[var(--border)]">
+                        {q.replace(/^—\s*/, "")}
+                      </blockquote>
+                    ))}
+                  </div>
                 </section>
               )}
               <p className="text-[10px] text-[var(--muted)] italic">AI-generated</p>

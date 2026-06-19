@@ -44,7 +44,7 @@ export interface Log {
   book_id: string;
   club_id: string | null;
   club_book_id: string | null;
-  kind: 'review' | 'shelf_change' | 'progress' | 'favourite' | 'reread';
+  kind: 'review' | 'shelf_change' | 'progress' | 'favourite' | 'reread' | 'note';
   rating: number | null;
   review: string | null;
   shelf: string | null;

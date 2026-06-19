@@ -4,8 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { StarRating } from "@/components/ui/star-rating";
-import { X, Plus } from "lucide-react";
-import Link from "next/link";
+import { X, Plus, Loader2, Sparkles, Trash2, Star } from "lucide-react";
 
 interface PersonalQuote {
   id: string;
@@ -17,19 +16,20 @@ interface PersonalQuote {
 interface PersonalBookSheetProps {
   open: boolean;
   onClose: () => void;
-  userBookId: string;
-  bookId: string;
+  userBookId: string | null;
+  bookId: string | null;
   bookTitle: string;
   bookAuthors: string[] | null;
   coverUrl: string | null;
   description: string | null;
-  rating: number | null;
-  review: string | null;
   shelf: string;
+  endedOn: string | null;
   progressPct: number | null;
   progressPage: number | null;
   pageCount: number | null;
   isFavourite: boolean;
+  canFavourite: boolean;
+  nextFavRank: number;
   onUpdate: () => void;
 }
 
@@ -42,20 +42,36 @@ export function PersonalBookSheet({
   bookAuthors,
   coverUrl,
   description,
-  rating,
-  review,
   shelf,
+  endedOn,
   progressPct,
   progressPage,
   pageCount,
   isFavourite,
+  canFavourite,
+  nextFavRank,
   onUpdate,
 }: PersonalBookSheetProps) {
   const [quotes, setQuotes] = useState<PersonalQuote[]>([]);
+  const [overview, setOverview] = useState<{ synopsis: string; characters: string; quotes: string | null } | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [myRating, setMyRating] = useState(0);
+  const [savingRating, setSavingRating] = useState(false);
+  const [dateRead, setDateRead] = useState("");
+  const [savingDate, setSavingDate] = useState(false);
+  const [pageInput, setPageInput] = useState("");
+  const [savingPage, setSavingPage] = useState(false);
+  const [personalNotes, setPersonalNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
   const [newQuote, setNewQuote] = useState("");
   const [newQuotePage, setNewQuotePage] = useState("");
   const [addingQuote, setAddingQuote] = useState(false);
   const [savingQuote, setSavingQuote] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [fav, setFav] = useState(false);
+  const [sheetOpenId, setSheetOpenId] = useState<string | null>(null);
 
   const supabase = createClient();
 
@@ -63,7 +79,6 @@ export function PersonalBookSheet({
     if (!bookId) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-
     const { data } = await supabase
       .from("quotes")
       .select("id, body, page_number, note")
@@ -71,18 +86,179 @@ export function PersonalBookSheet({
       .eq("user_id", user.id)
       .is("club_id", null)
       .order("created_at", { ascending: false });
-
     if (data) setQuotes(data);
   }, [bookId, supabase]);
 
+  const loadMyRating = useCallback(async () => {
+    if (!bookId) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("logs")
+      .select("rating")
+      .eq("user_id", user.id)
+      .eq("book_id", bookId)
+      .is("club_id", null)
+      .in("kind", ["review", "reread"])
+      .not("rating", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setMyRating(data?.rating ?? 0);
+  }, [bookId, supabase]);
+
+  const loadPersonalNotes = useCallback(async () => {
+    if (!bookId) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("logs")
+      .select("review")
+      .eq("user_id", user.id)
+      .eq("book_id", bookId)
+      .is("club_id", null)
+      .eq("kind", "note")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setPersonalNotes(data?.review ?? "");
+  }, [bookId, supabase]);
+
+  const loadOverview = useCallback(async (id: string, refresh = false) => {
+    setOverviewLoading(true);
+    setOverviewError(null);
+    try {
+      const res = await fetch("/api/club/overview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookId: id, refresh }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setOverviewError(data.error || "Couldn't generate an overview.");
+      } else {
+        setOverview({ synopsis: data.synopsis, characters: data.characters, quotes: data.quotes || null });
+      }
+    } catch {
+      setOverviewError("Network error. Try again.");
+    }
+    setOverviewLoading(false);
+  }, []);
+
   useEffect(() => {
-    if (open) {
+    const id = open ? userBookId : null;
+    if (id && id !== sheetOpenId) {
+      setSheetOpenId(id);
+      setDateRead(endedOn || "");
+      setPageInput(progressPage ? String(progressPage) : "");
+      setMyRating(0);
+      setFav(isFavourite);
       setAddingQuote(false);
       setNewQuote("");
       setNewQuotePage("");
+      setOverview(null);
+      setOverviewError(null);
+      setConfirmRemove(false);
+      setPersonalNotes("");
       loadQuotes();
+      loadMyRating();
+      loadPersonalNotes();
+      if (bookId) loadOverview(bookId);
     }
-  }, [open, loadQuotes]);
+    if (!open && sheetOpenId) {
+      setSheetOpenId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, userBookId]);
+
+  async function saveRating(value: number) {
+    if (!bookId) return;
+    setMyRating(value);
+    setSavingRating(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSavingRating(false); return; }
+
+    await supabase
+      .from("logs")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("book_id", bookId)
+      .is("club_id", null)
+      .in("kind", ["review", "reread"]);
+
+    if (value > 0) {
+      await supabase.from("logs").insert({
+        user_id: user.id,
+        book_id: bookId,
+        kind: "review",
+        rating: value,
+      });
+    }
+    setSavingRating(false);
+    onUpdate();
+  }
+
+  async function saveDateRead(value: string) {
+    if (!userBookId) return;
+    setDateRead(value);
+    setSavingDate(true);
+    await supabase
+      .from("user_books")
+      .update({ finished_at: value || null })
+      .eq("id", userBookId);
+    setSavingDate(false);
+    onUpdate();
+  }
+
+  async function savePage(value: string) {
+    if (!userBookId) return;
+    setSavingPage(true);
+    const page = value ? parseInt(value) : null;
+    const pct = page && pageCount ? Math.min(100, Math.round((page / pageCount) * 100)) : null;
+    await supabase
+      .from("user_books")
+      .update({ progress_page: page, progress_pct: pct, updated_at: new Date().toISOString() })
+      .eq("id", userBookId);
+    setSavingPage(false);
+    onUpdate();
+  }
+
+  async function savePersonalNotes() {
+    if (!bookId) return;
+    setSavingNotes(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSavingNotes(false); return; }
+
+    await supabase
+      .from("logs")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("book_id", bookId)
+      .is("club_id", null)
+      .eq("kind", "note");
+
+    if (personalNotes.trim()) {
+      await supabase.from("logs").insert({
+        user_id: user.id,
+        book_id: bookId,
+        kind: "note",
+        review: personalNotes.trim(),
+      });
+    }
+    setSavingNotes(false);
+  }
+
+  async function toggleFavourite() {
+    if (!userBookId) return;
+    const next = !fav;
+    if (next && !canFavourite) return;
+    setFav(next);
+    await supabase
+      .from("user_books")
+      .update({ is_favourite: next, favourite_rank: next ? nextFavRank : null })
+      .eq("id", userBookId);
+    onUpdate();
+  }
 
   async function submitQuote() {
     if (!bookId || !newQuote.trim()) return;
@@ -104,10 +280,27 @@ export function PersonalBookSheet({
     loadQuotes();
   }
 
+  async function removeFromShelf() {
+    if (!userBookId) return;
+    setRemoving(true);
+    try {
+      const res = await fetch("/api/personal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "remove_book", userBookId }),
+      });
+      if (res.ok) {
+        onUpdate();
+        onClose();
+      }
+    } catch {}
+    setRemoving(false);
+    setConfirmRemove(false);
+  }
+
   if (!open) return null;
 
   const cleanDescription = description?.replace(/<[^>]*>/g, "") || null;
-  const shelfLabel = shelf === "want" ? "Want to read" : shelf === "reading" ? "Reading" : "Read";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center">
@@ -136,38 +329,53 @@ export function PersonalBookSheet({
               <p className="text-sm text-[var(--muted)] italic">
                 {bookAuthors?.join(", ")}
               </p>
-              {rating !== null ? (
+              {myRating > 0 ? (
                 <div className="flex items-center gap-2 pt-1">
                   <span className="text-3xl font-bold text-[var(--foreground)]">
-                    {rating}
+                    {myRating}
                   </span>
                   <div className="flex flex-col">
-                    <StarRating rating={rating} size="sm" readonly />
+                    <StarRating rating={myRating} size="sm" readonly />
                     <span className="text-xs text-[var(--muted)] mt-0.5">your rating</span>
                   </div>
                 </div>
               ) : (
                 <p className="text-sm text-[var(--muted)] italic pt-1">Not rated yet</p>
               )}
-              <div className="flex items-center gap-2 pt-1">
-                <span className="text-xs px-2 py-0.5 rounded-full bg-coral/10 text-coral font-medium">
-                  {shelfLabel}
-                </span>
-                {isFavourite && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-ochre/10 text-ochre font-medium">
-                    ★ Favourite
-                  </span>
-                )}
-              </div>
+              <button
+                onClick={toggleFavourite}
+                disabled={!fav && !canFavourite}
+                className={`mt-1 inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full transition-colors disabled:opacity-40 ${
+                  fav ? "bg-coral/10 text-coral" : "border border-[var(--border)] text-[var(--muted)]"
+                }`}
+                title={!fav && !canFavourite ? "Top 5 is full" : undefined}
+              >
+                <Star className={`w-3 h-3 ${fav ? "fill-current" : ""}`} />
+                {fav ? "In Top 5" : "Add to Top 5"}
+              </button>
             </div>
           </div>
 
-          {/* Progress (if currently reading) */}
+          {/* Your rating */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                Your rating
+              </h4>
+              {savingRating && <span className="text-xs text-[var(--muted)]">Saving…</span>}
+            </div>
+            <StarRating rating={myRating} onChange={saveRating} size="lg" />
+          </section>
+
+          {/* Progress (reading shelf) */}
           {shelf === "reading" && (
             <section>
-              <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
-                Progress
-              </h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                  Progress
+                </h4>
+                {savingPage && <span className="text-xs text-[var(--muted)]">Saving…</span>}
+              </div>
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-2 rounded-full bg-[var(--border)]">
                   <div
@@ -175,42 +383,111 @@ export function PersonalBookSheet({
                     style={{ width: `${progressPct || 0}%` }}
                   />
                 </div>
-                <span className="text-sm text-[var(--foreground)] font-medium">
-                  {progressPage ? `p.${progressPage}${pageCount ? ` / ${pageCount}` : ""}` : `${Math.round(progressPct || 0)}%`}
-                </span>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-[var(--muted)]">p.</span>
+                  <input
+                    type="number"
+                    value={pageInput}
+                    onChange={(e) => setPageInput(e.target.value)}
+                    onBlur={() => savePage(pageInput)}
+                    placeholder="0"
+                    className="w-16 px-2 py-1 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-coral/30"
+                  />
+                  {pageCount && <span className="text-xs text-[var(--muted)]">/ {pageCount}</span>}
+                </div>
               </div>
             </section>
           )}
 
-          {/* Review */}
-          {review && (
-            <section>
-              <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
-                Your review
+          {/* Date read */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                Date read
               </h4>
-              <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed">
-                {review}
-              </p>
-            </section>
-          )}
+              {savingDate && <span className="text-xs text-[var(--muted)]">Saving…</span>}
+            </div>
+            <input
+              type="date"
+              value={dateRead}
+              max={new Date().toISOString().split("T")[0]}
+              onChange={(e) => saveDateRead(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-coral/30"
+            />
+          </section>
 
-          {/* Synopsis */}
-          {cleanDescription && (
+          {/* AI overview */}
+          {overviewLoading ? (
+            <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+              <Loader2 className="w-4 h-4 animate-spin" /> Writing an overview…
+            </div>
+          ) : overview ? (
+            <>
+              <section>
+                <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
+                  Synopsis
+                </h4>
+                <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed">
+                  {overview.synopsis}
+                </p>
+              </section>
+              {overview.characters && (
+                <section>
+                  <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
+                    Who&apos;s who
+                  </h4>
+                  <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed whitespace-pre-wrap">
+                    {overview.characters}
+                  </p>
+                </section>
+              )}
+              {overview.quotes && (
+                <section>
+                  <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
+                    Notable quotes
+                  </h4>
+                  <div className="space-y-2">
+                    {overview.quotes.split("\n").filter(Boolean).map((q, i) => (
+                      <blockquote key={i} className="font-serif italic text-sm text-[var(--foreground)] leading-relaxed pl-3 border-l-2 border-[var(--border)]">
+                        {q.replace(/^—\s*/, "")}
+                      </blockquote>
+                    ))}
+                  </div>
+                </section>
+              )}
+              <p className="text-[10px] text-[var(--muted)] italic">AI-generated</p>
+            </>
+          ) : overviewError ? (
+            <section className="space-y-2">
+              <p className="text-xs text-red-500">{overviewError}</p>
+              <button
+                onClick={() => bookId && loadOverview(bookId, true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-coral text-white text-sm font-medium transition-opacity hover:opacity-90"
+              >
+                <Sparkles className="w-4 h-4" /> Try again
+              </button>
+              {cleanDescription && (
+                <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed pt-1">
+                  {cleanDescription}
+                </p>
+              )}
+            </section>
+          ) : cleanDescription ? (
             <section>
               <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
                 Synopsis
               </h4>
-              <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed line-clamp-6">
+              <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed">
                 {cleanDescription}
               </p>
             </section>
-          )}
+          ) : null}
 
           {/* Quotes */}
           <section>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                Quotes
+                Favourite quotes
               </h4>
               {!addingQuote && (
                 <button
@@ -280,13 +557,51 @@ export function PersonalBookSheet({
             )}
           </section>
 
-          {/* Open full page link */}
-          <Link
-            href={`/book/${bookId}`}
-            className="flex items-center justify-center gap-2 py-2.5 rounded-lg bg-coral text-white text-sm font-medium transition-opacity hover:opacity-90"
-          >
-            View full details →
-          </Link>
+          {/* Personal notes */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                My notes
+              </h4>
+              {savingNotes && <span className="text-xs text-[var(--muted)]">Saving…</span>}
+            </div>
+            <textarea
+              value={personalNotes}
+              onChange={(e) => setPersonalNotes(e.target.value)}
+              onBlur={savePersonalNotes}
+              placeholder="Thoughts, themes, things to remember…"
+              rows={3}
+              className="w-full px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] text-sm font-serif focus:outline-none focus:ring-2 focus:ring-coral/30 resize-none"
+            />
+          </section>
+
+          {/* Remove from shelf */}
+          <div className="pt-2">
+            {confirmRemove ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={removeFromShelf}
+                  disabled={removing}
+                  className="flex-1 py-2 rounded-lg bg-red-500 text-white text-sm font-medium disabled:opacity-50"
+                >
+                  {removing ? "Removing…" : "Yes, remove"}
+                </button>
+                <button
+                  onClick={() => setConfirmRemove(false)}
+                  className="flex-1 py-2 rounded-lg border border-[var(--border)] text-sm text-[var(--foreground)]"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmRemove(true)}
+                className="w-full flex items-center justify-center gap-2 py-2 text-sm text-red-500 hover:text-red-400 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" /> Remove from my books
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

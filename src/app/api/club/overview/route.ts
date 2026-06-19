@@ -2,9 +2,11 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
-// Generates (and caches) a spoiler-free synopsis + main-character overview for a
-// club's current book using Claude. Results are stored on the club_books row so we
-// only pay for generation once per book.
+// Generates (and caches) a spoiler-free synopsis + main-character overview +
+// notable quotes for a book using Claude. Works for two contexts:
+//   - club books: pass { clubBookId } — cached on the club_books row.
+//   - personal books: pass { bookId } — cached on the shared books row.
+// We only pay for generation once per book (per context).
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -13,42 +15,68 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { clubBookId, refresh } = await request.json();
-  if (!clubBookId) {
-    return NextResponse.json({ error: "Missing clubBookId" }, { status: 400 });
+  const { clubBookId, bookId, refresh } = await request.json();
+  if (!clubBookId && !bookId) {
+    return NextResponse.json({ error: "Missing clubBookId or bookId" }, { status: 400 });
   }
 
-  // Load the club book + its book, and confirm the user belongs to the club.
-  const { data: clubBook } = await supabase
-    .from("club_books")
-    .select("id, club_id, ai_synopsis, ai_characters, ai_quotes, book:books(title, authors, description)")
-    .eq("id", clubBookId)
-    .single();
+  // Resolve the book + where we read/write the cached overview.
+  let cached: { ai_synopsis: string | null; ai_characters: string | null; ai_quotes: string | null } | null = null;
+  let book: { title?: string; authors?: string[]; description?: string } | null = null;
+  let cacheTable: "club_books" | "books";
+  let cacheId: string;
 
-  if (!clubBook) {
-    return NextResponse.json({ error: "Book not found" }, { status: 404 });
-  }
+  if (clubBookId) {
+    const { data: clubBook } = await supabase
+      .from("club_books")
+      .select("id, club_id, ai_synopsis, ai_characters, ai_quotes, book:books(title, authors, description)")
+      .eq("id", clubBookId)
+      .single();
 
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("user_id")
-    .eq("club_id", (clubBook as any).club_id)
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
+    if (!clubBook) {
+      return NextResponse.json({ error: "Book not found" }, { status: 404 });
+    }
 
-  if (!membership) {
-    return NextResponse.json({ error: "Not a club member" }, { status: 403 });
+    const { data: membership } = await supabase
+      .from("club_members")
+      .select("user_id")
+      .eq("club_id", (clubBook as any).club_id)
+      .eq("user_id", user.id)
+      .limit(1)
+      .single();
+
+    if (!membership) {
+      return NextResponse.json({ error: "Not a club member" }, { status: 403 });
+    }
+
+    cached = clubBook as any;
+    book = (clubBook as any).book;
+    cacheTable = "club_books";
+    cacheId = clubBookId;
+  } else {
+    const { data: bookRow } = await supabase
+      .from("books")
+      .select("id, title, authors, description, ai_synopsis, ai_characters, ai_quotes")
+      .eq("id", bookId)
+      .single();
+
+    if (!bookRow) {
+      return NextResponse.json({ error: "Book not found" }, { status: 404 });
+    }
+
+    cached = bookRow as any;
+    book = bookRow as any;
+    cacheTable = "books";
+    cacheId = bookId;
   }
 
   // Return the cached overview unless a refresh was explicitly requested.
-  // Require ai_quotes too, so older books (synopsis/characters only) regenerate
-  // and pick up quotes.
-  if (!refresh && (clubBook as any).ai_synopsis && (clubBook as any).ai_characters && (clubBook as any).ai_quotes) {
+  // Require ai_quotes too, so older books regenerate to pick them up.
+  if (!refresh && cached?.ai_synopsis && cached?.ai_characters && cached?.ai_quotes) {
     return NextResponse.json({
-      synopsis: (clubBook as any).ai_synopsis,
-      characters: (clubBook as any).ai_characters,
-      quotes: (clubBook as any).ai_quotes || null,
+      synopsis: cached.ai_synopsis,
+      characters: cached.ai_characters,
+      quotes: cached.ai_quotes || null,
       cached: true,
     });
   }
@@ -60,7 +88,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const book = (clubBook as any).book;
   const title: string = book?.title || "";
   const authors: string[] = book?.authors || [];
   const description: string = (book?.description || "").replace(/<[^>]*>/g, "").slice(0, 1500);
@@ -99,7 +126,7 @@ export async function POST(request: Request) {
       system: [
         {
           type: "text",
-          text: "You are a knowledgeable book-club companion. You write concise, spoiler-free synopses and main-character overviews to help a reading group get oriented before they start a book. Never reveal plot twists, endings, character deaths, or any major development. Describe characters only as they are introduced. If you are not familiar with the book, say so honestly in the synopsis rather than inventing details.",
+          text: "You are a knowledgeable book-club companion. You write concise, spoiler-free synopses and main-character overviews to help a reader get oriented before they start a book. Never reveal plot twists, endings, character deaths, or any major development. Describe characters only as they are introduced. If you are not familiar with the book, say so honestly in the synopsis rather than inventing details.",
           cache_control: { type: "ephemeral" },
         },
       ],
@@ -108,7 +135,7 @@ export async function POST(request: Request) {
           role: "user",
           content: `Book: "${title}"${authors.length ? ` by ${authors.join(", ")}` : ""}\n\n${
             description ? `Publisher description (may help, may be marketing fluff):\n${description}` : "No description available."
-          }\n\nWrite a spoiler-free synopsis, a spoiler-free main-character overview, and 3 notable quotes from the book for our book club.`,
+          }\n\nWrite a spoiler-free synopsis, a spoiler-free main-character overview, and 3 notable quotes from the book.`,
         },
       ],
     });
@@ -118,9 +145,9 @@ export async function POST(request: Request) {
     const parsed = JSON.parse(raw) as { synopsis: string; characters: string; quotes: string };
 
     await supabase
-      .from("club_books")
+      .from(cacheTable)
       .update({ ai_synopsis: parsed.synopsis, ai_characters: parsed.characters, ai_quotes: parsed.quotes || null })
-      .eq("id", clubBookId);
+      .eq("id", cacheId);
 
     return NextResponse.json({ synopsis: parsed.synopsis, characters: parsed.characters, quotes: parsed.quotes || null, cached: false });
   } catch (err: any) {

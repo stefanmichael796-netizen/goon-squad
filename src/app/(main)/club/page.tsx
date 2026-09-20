@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
-import { Loading } from "@/components/ui/loading";
+import { PageSkeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ClubBookSheet } from "@/components/shared/club-book-sheet";
 import { useToast } from "@/components/ui/toast";
 import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles, Plus, Camera, CheckCircle2 } from "lucide-react";
@@ -413,7 +414,7 @@ export default function ClubPage() {
     });
   }
 
-  if (loading) return <Loading />;
+  if (loading) return <PageSkeleton />;
 
   if (!club) {
     return (
@@ -630,44 +631,44 @@ export default function ClubPage() {
 
       {/* Current read */}
       {currentBook?.book && (
-        <section className="rounded-xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden">
-          <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
-            <h2 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-              Currently reading
-            </h2>
+        <section className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden book-shadow">
+          <div className="relative p-5">
             <button
               onClick={() => openPicker("current")}
-              className="text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
+              className="absolute top-4 right-4 text-xs text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
             >
               Change
             </button>
-          </div>
-
-          <div className="p-4">
-            <div className="flex gap-4">
-              <Link href={`/book/${currentBook.book_id}`}>
+            <div className="flex gap-5">
+              <Link href={`/book/${currentBook.book_id}`} className="flex-shrink-0 press">
                 <BookCover
                   coverUrl={(currentBook.book as any).cover_url}
                   title={(currentBook.book as any).title}
-                  size="lg"
+                  size="xl"
                 />
               </Link>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 pt-1">
+                <p className="text-[10px] font-semibold text-[var(--accent)] uppercase tracking-[0.15em] mb-1.5">
+                  Now reading
+                </p>
                 <Link href={`/book/${currentBook.book_id}`}>
-                  <h3 className="font-serif font-semibold text-lg text-[var(--foreground)] leading-tight">
+                  <h2 className="font-serif font-bold text-2xl text-[var(--foreground)] leading-[1.15]">
                     {(currentBook.book as any).title}
-                  </h3>
+                  </h2>
                 </Link>
-                <p className="text-sm text-[var(--muted)]">
+                <p className="text-sm text-[var(--muted)] italic mt-1">
                   {(currentBook.book as any).authors?.join(", ")}
                 </p>
                 {(currentBook.book as any).page_count && (
-                  <p className="text-xs text-[var(--muted)] mt-1">
+                  <p className="text-xs text-[var(--muted)] mt-2">
                     {(currentBook.book as any).page_count} pages
                   </p>
                 )}
               </div>
             </div>
+          </div>
+
+          <div className="px-5 pb-5 -mt-1">
 
             {/* AI synopsis + spoiler-free characters — generated automatically */}
             {overview ? (
@@ -778,32 +779,31 @@ export default function ClubPage() {
         </div>
 
         {pastBooksWithRatings.length > 0 ? (
-          <div className="grid grid-cols-3 gap-3">
-            {pastBooksWithRatings.map((item) => {
+          <div className="grid grid-cols-3 gap-3 stagger">
+            {pastBooksWithRatings.map((item, idx) => {
               const book = item.clubBook.book as any;
               return (
                 <button
                   key={item.clubBook.id}
                   onClick={() => setSelectedBook(item)}
-                  className="flex flex-col items-center gap-1.5 group"
+                  style={{ ["--i" as string]: idx } as React.CSSProperties}
+                  className="group text-left press"
                 >
-                  <div className="w-full transition-transform group-hover:-translate-y-0.5">
+                  <div className="relative transition-transform duration-200 group-hover:-translate-y-1">
                     <BookCover
                       coverUrl={book?.cover_url}
                       title={book?.title || ""}
                       size="lg"
                       className="w-full h-auto aspect-[2/3]"
                     />
+                    {item.avgRating !== null && (
+                      <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/70 text-white text-[11px] font-bold backdrop-blur-sm">
+                        {item.avgRating}
+                      </span>
+                    )}
                   </div>
-                  {item.avgRating !== null ? (
-                    <span className="text-sm font-bold text-[var(--foreground)]">
-                      {item.avgRating}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-[var(--muted)]">—</span>
-                  )}
                   {(item.clubBook as any).recommended_by && (
-                    <span className="text-[10px] text-[var(--muted)] truncate max-w-full">
+                    <span className="block mt-1.5 text-[10px] text-[var(--muted)] truncate">
                       {(item.clubBook as any).recommended_by}
                     </span>
                   )}
@@ -812,9 +812,7 @@ export default function ClubPage() {
             })}
           </div>
         ) : (
-          <p className="text-sm text-[var(--muted)] italic">
-            No books on the shelf yet. Add one you&apos;ve read.
-          </p>
+          <EmptyState message="No books on the shelf yet. Add one you've read." icon={BookOpen} />
         )}
       </section>
 

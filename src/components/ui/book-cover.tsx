@@ -17,6 +17,30 @@ const sizes = {
   xl: { width: 160, height: 240, class: "w-40 h-60" },
 };
 
+// A subtle spine + page-edge treatment shared by real and placeholder covers,
+// so every cover reads as a physical book rather than a flat rectangle.
+function Spine() {
+  return (
+    <>
+      {/* soft shadow down the spine (left edge) */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 w-[9%] bg-gradient-to-r from-black/25 via-black/10 to-transparent"
+      />
+      {/* thin highlight just inside the spine */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-[9%] w-px bg-white/25"
+      />
+      {/* faint sheen across the whole cover */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-transparent to-white/10"
+      />
+    </>
+  );
+}
+
 export function BookCover({ coverUrl, title, size = "md", className }: BookCoverProps) {
   const s = sizes[size];
 
@@ -25,19 +49,27 @@ export function BookCover({ coverUrl, title, size = "md", className }: BookCover
       <div
         className={cn(
           s.class,
-          "rounded-md bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center p-2 flex-shrink-0",
+          "relative rounded-[3px] book-shadow overflow-hidden flex-shrink-0 flex items-center justify-center p-2",
+          "bg-gradient-to-br from-[var(--accent)] to-[color-mix(in_srgb,var(--accent)_70%,black)]",
           className
         )}
       >
-        <span className="text-xs text-[var(--muted)] font-serif text-center leading-tight line-clamp-3">
+        <span className="relative z-10 text-xs text-white/90 font-serif text-center leading-tight line-clamp-4">
           {title}
         </span>
+        <Spine />
       </div>
     );
   }
 
   return (
-    <div className={cn(s.class, "rounded-md overflow-hidden flex-shrink-0 shadow-sm", className)}>
+    <div
+      className={cn(
+        s.class,
+        "relative rounded-[3px] book-shadow overflow-hidden flex-shrink-0",
+        className
+      )}
+    >
       <Image
         src={coverUrl}
         alt={title}
@@ -46,6 +78,7 @@ export function BookCover({ coverUrl, title, size = "md", className }: BookCover
         className="w-full h-full object-cover"
         unoptimized
       />
+      <Spine />
     </div>
   );
 }

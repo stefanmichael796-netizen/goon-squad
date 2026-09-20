@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
-import { Loading } from "@/components/ui/loading";
+import { PageSkeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PersonalBookSheet } from "@/components/shared/personal-book-sheet";
 import { useToast } from "@/components/ui/toast";
 import { Search, Loader2, BookOpen, Plus, LogOut, ChevronLeft, ChevronRight, CheckCircle2, RotateCw } from "lucide-react";
@@ -346,7 +347,7 @@ export default function PersonalPage() {
     setPickSaving(false);
   }
 
-  if (loading) return <Loading />;
+  if (loading) return <PageSkeleton />;
 
   return (
     <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6">
@@ -382,14 +383,19 @@ export default function PersonalPage() {
                 <div key={fav.id} className="flex flex-col items-center gap-1">
                   <button
                     onClick={() => setSelected(fav)}
-                    className="group w-full"
+                    className="group w-full press"
                   >
-                    <BookCover
-                      coverUrl={(fav.book as any).cover_url}
-                      title={(fav.book as any).title}
-                      size="md"
-                      className="w-full h-auto aspect-[2/3] transition-transform group-hover:-translate-y-0.5"
-                    />
+                    <div className="relative transition-transform duration-200 group-hover:-translate-y-1">
+                      <BookCover
+                        coverUrl={(fav.book as any).cover_url}
+                        title={(fav.book as any).title}
+                        size="md"
+                        className="w-full h-auto aspect-[2/3]"
+                      />
+                      <span className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-[var(--accent)] text-white text-[10px] font-bold flex items-center justify-center book-shadow">
+                        {i + 1}
+                      </span>
+                    </div>
                   </button>
                   {favourites.length > 1 && (
                     <div className="flex gap-1">
@@ -415,9 +421,9 @@ export default function PersonalPage() {
             return (
               <div
                 key={i}
-                className="w-full aspect-[2/3] rounded-md border-2 border-dashed border-[var(--border)] flex items-center justify-center"
+                className="w-full aspect-[2/3] rounded-[3px] border-2 border-dashed border-[var(--border)] flex items-center justify-center"
               >
-                <span className="text-[var(--muted)] text-xs">{i + 1}</span>
+                <span className="text-[var(--muted)] text-xs font-serif">{i + 1}</span>
               </div>
             );
           })}
@@ -493,8 +499,8 @@ export default function PersonalPage() {
       )}
 
       {/* Currently reading */}
-      <section className="rounded-xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden">
-        <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
+      <section className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden book-shadow">
+        <div className="px-5 py-3 border-b border-[var(--border)] flex items-center justify-between">
           <h2 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
             Currently reading
           </h2>
@@ -511,20 +517,23 @@ export default function PersonalPage() {
             {reading.map((ub) => {
               const book = ub.book as any;
               return (
-                <div key={ub.id} className="p-4">
-                  <div className="flex gap-4">
-                    <button onClick={() => setSelected(ub)}>
-                      <BookCover coverUrl={book?.cover_url} title={book?.title || ""} size="lg" />
+                <div key={ub.id} className="p-5">
+                  <div className="flex gap-5">
+                    <button onClick={() => setSelected(ub)} className="flex-shrink-0 press">
+                      <BookCover coverUrl={book?.cover_url} title={book?.title || ""} size="xl" />
                     </button>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 pt-1">
+                      <p className="text-[10px] font-semibold text-[var(--accent)] uppercase tracking-[0.15em] mb-1.5">
+                        Now reading
+                      </p>
                       <button onClick={() => setSelected(ub)} className="text-left">
-                        <h3 className="font-serif font-semibold text-lg text-[var(--foreground)] leading-tight">
+                        <h3 className="font-serif font-bold text-2xl text-[var(--foreground)] leading-[1.15]">
                           {book?.title}
                         </h3>
                       </button>
-                      <p className="text-sm text-[var(--muted)]">{book?.authors?.join(", ")}</p>
+                      <p className="text-sm text-[var(--muted)] italic mt-1">{book?.authors?.join(", ")}</p>
                       {book?.page_count && (
-                        <p className="text-xs text-[var(--muted)] mt-1">{book.page_count} pages</p>
+                        <p className="text-xs text-[var(--muted)] mt-2">{book.page_count} pages</p>
                       )}
                     </div>
                   </div>
@@ -619,33 +628,32 @@ export default function PersonalPage() {
         </div>
 
         {readBooks.length > 0 ? (
-          <div className="grid grid-cols-3 gap-3">
-            {readBooks.map((ub) => {
+          <div className="grid grid-cols-3 gap-3 stagger">
+            {readBooks.map((ub, idx) => {
               const book = ub.book as any;
               const rating = ratings[ub.book_id];
               return (
                 <button
                   key={ub.id}
                   onClick={() => setSelected(ub)}
-                  className="flex flex-col items-center gap-1.5 group"
+                  style={{ ["--i" as string]: idx } as React.CSSProperties}
+                  className="group text-left press"
                 >
-                  <div className="w-full transition-transform group-hover:-translate-y-0.5">
+                  <div className="relative transition-transform duration-200 group-hover:-translate-y-1">
                     <BookCover
                       coverUrl={book?.cover_url}
                       title={book?.title || ""}
                       size="lg"
                       className="w-full h-auto aspect-[2/3]"
                     />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {rating !== undefined ? (
-                      <span className="text-sm font-bold text-[var(--foreground)]">{rating}</span>
-                    ) : (
-                      <span className="text-xs text-[var(--muted)]">—</span>
+                    {rating !== undefined && (
+                      <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/70 text-white text-[11px] font-bold backdrop-blur-sm">
+                        {rating}
+                      </span>
                     )}
                     {rereadCounts[ub.book_id] > 0 && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-[var(--muted)]" title="Reread">
-                        <RotateCw className="w-3 h-3" />
+                      <span className="absolute top-1.5 left-1.5 flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-black/70 text-white text-[10px] font-medium backdrop-blur-sm" title="Reread">
+                        <RotateCw className="w-2.5 h-2.5" />
                         {rereadCounts[ub.book_id]}
                       </span>
                     )}
@@ -655,9 +663,7 @@ export default function PersonalPage() {
             })}
           </div>
         ) : (
-          <p className="text-sm text-[var(--muted)] italic">
-            No books on the shelf yet. Add one you&apos;ve read.
-          </p>
+          <EmptyState message="Your shelf is waiting. Add a book you've read." icon={BookOpen} />
         )}
       </section>
 

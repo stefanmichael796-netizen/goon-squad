@@ -29,6 +29,7 @@ export default function PersonalPage() {
   const [savingReadingNote, setSavingReadingNote] = useState<string | null>(null);
   const [finishingId, setFinishingId] = useState<string | null>(null);
   const overviewTriedRef = useRef<Set<string>>(new Set());
+  const syncedRef = useRef(false);
 
   const supabase = createClient();
   const router = useRouter();
@@ -96,7 +97,101 @@ export default function PersonalPage() {
     setLoading(false);
   }, [supabase]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  // Pull any books the club has finished onto this member's personal "read"
+  // shelf, and copy their club ratings across. Idempotent — the unique
+  // (user_id, book_id) constraint plus ignoreDuplicates means re-running is safe.
+  // This is what makes club reads show up under Personal, whoever marked them done.
+  const syncFromClub = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: memberships } = await supabase
+      .from("club_members")
+      .select("club_id")
+      .eq("user_id", user.id);
+    const clubIds = (memberships || []).map((m: any) => m.club_id);
+    if (clubIds.length === 0) return;
+
+    const { data: pastBooks } = await supabase
+      .from("club_books")
+      .select("book_id, ended_on")
+      .in("club_id", clubIds)
+      .eq("status", "past");
+    if (!pastBooks || pastBooks.length === 0) return;
+
+    const { data: existing } = await supabase
+      .from("user_books")
+      .select("book_id")
+      .eq("user_id", user.id);
+    const have = new Set((existing || []).map((e: any) => e.book_id));
+
+    const seen = new Set<string>();
+    const toInsert = pastBooks
+      .filter((cb: any) => {
+        if (have.has(cb.book_id) || seen.has(cb.book_id)) return false;
+        seen.add(cb.book_id);
+        return true;
+      })
+      .map((cb: any) => ({
+        user_id: user.id,
+        book_id: cb.book_id,
+        shelf: "read",
+        finished_at: cb.ended_on,
+      }));
+
+    if (toInsert.length > 0) {
+      await supabase
+        .from("user_books")
+        .upsert(toInsert, { onConflict: "user_id,book_id", ignoreDuplicates: true });
+    }
+
+    // Copy each club rating into a personal rating, unless one already exists.
+    const { data: clubRatings } = await supabase
+      .from("logs")
+      .select("book_id, rating, created_at")
+      .eq("user_id", user.id)
+      .in("club_id", clubIds)
+      .in("kind", ["review", "reread"])
+      .not("rating", "is", null)
+      .order("created_at", { ascending: false });
+    const { data: personalRatings } = await supabase
+      .from("logs")
+      .select("book_id")
+      .eq("user_id", user.id)
+      .is("club_id", null)
+      .in("kind", ["review", "reread"])
+      .not("rating", "is", null);
+    const havePersonal = new Set((personalRatings || []).map((r: any) => r.book_id));
+
+    const latestClub = new Map<string, number>();
+    (clubRatings || []).forEach((r: any) => {
+      if (!latestClub.has(r.book_id)) latestClub.set(r.book_id, r.rating);
+    });
+
+    const ratingInserts = [...latestClub.entries()]
+      .filter(([bookId]) => !havePersonal.has(bookId))
+      .map(([bookId, rating]) => ({
+        user_id: user.id,
+        book_id: bookId,
+        kind: "review",
+        rating,
+        club_id: null,
+      }));
+
+    if (ratingInserts.length > 0) {
+      await supabase.from("logs").insert(ratingInserts);
+    }
+  }, [supabase]);
+
+  useEffect(() => {
+    (async () => {
+      if (!syncedRef.current) {
+        syncedRef.current = true;
+        await syncFromClub();
+      }
+      await loadData();
+    })();
+  }, [syncFromClub, loadData]);
 
   const readingIds = reading.map(r => r.book_id).join(",");
 

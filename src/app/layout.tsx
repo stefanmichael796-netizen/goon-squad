@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { ToastProvider } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
   title: "Goon Squad",
@@ -37,7 +38,7 @@ export default function RootLayout({
     <html lang="en" className="h-full">
       <body className="min-h-full flex flex-col font-sans antialiased">
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );

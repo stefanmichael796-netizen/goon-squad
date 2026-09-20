@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { Loading } from "@/components/ui/loading";
 import { ClubBookSheet } from "@/components/shared/club-book-sheet";
+import { useToast } from "@/components/ui/toast";
 import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles, Plus, Camera, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import type { Club, ClubMember, ClubBook, Profile, GoogleBooksVolume } from "@/lib/types";
@@ -55,6 +56,7 @@ export default function ClubPage() {
   const [formLoading, setFormLoading] = useState(false);
 
   const supabase = createClient();
+  const toast = useToast();
 
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -249,13 +251,20 @@ export default function ClubPage() {
   async function finishCurrentBook() {
     setFinishingCurrent(true);
     try {
-      await fetch("/api/club", {
+      const res = await fetch("/api/club", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "finish_current_book" }),
       });
-      await loadData();
-    } catch {}
+      if (res.ok) {
+        await loadData();
+        toast("Marked as finished — it's on the shelf now", "success");
+      } else {
+        toast("Couldn't mark it finished — try again", "error");
+      }
+    } catch {
+      toast("Couldn't mark it finished — try again", "error");
+    }
     setFinishingCurrent(false);
   }
 
@@ -333,7 +342,7 @@ export default function ClubPage() {
   async function handlePickBook(vol: GoogleBooksVolume) {
     setPickSaving(true);
     try {
-      await fetch("/api/club", {
+      const res = await fetch("/api/club", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -341,11 +350,17 @@ export default function ClubPage() {
           googleBooksVolume: vol,
         }),
       });
-      setPickBookOpen(false);
-      setPickQuery("");
-      setPickResults([]);
-      loadData();
-    } catch {}
+      if (!res.ok) {
+        toast("Couldn't add that book — try again", "error");
+      } else {
+        setPickBookOpen(false);
+        setPickQuery("");
+        setPickResults([]);
+        loadData();
+      }
+    } catch {
+      toast("Couldn't add that book — try again", "error");
+    }
     setPickSaving(false);
   }
 
@@ -362,8 +377,14 @@ export default function ClubPage() {
         .from("clubs")
         .update({ logo_url: dataUrl })
         .eq("id", club.id);
-      if (!error) setClub({ ...club, logo_url: dataUrl });
-    } catch {}
+      if (!error) {
+        setClub({ ...club, logo_url: dataUrl });
+      } else {
+        toast("Couldn't update the club photo — try again", "error");
+      }
+    } catch {
+      toast("Couldn't update the club photo — try again", "error");
+    }
     setLogoUploading(false);
   }
 

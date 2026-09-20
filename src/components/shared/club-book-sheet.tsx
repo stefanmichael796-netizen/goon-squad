@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { StarRating } from "@/components/ui/star-rating";
+import { useToast } from "@/components/ui/toast";
 import { X, MessageCircle, Plus, Loader2, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
 
@@ -77,6 +78,7 @@ export function ClubBookSheet({
   const [savingNotes, setSavingNotes] = useState(false);
 
   const supabase = createClient();
+  const toast = useToast();
 
   const loadQuotes = useCallback(async () => {
     if (!bookId) return;
@@ -172,7 +174,7 @@ export function ClubBookSheet({
       .eq("kind", "note");
 
     if (personalNotes.trim()) {
-      await supabase.from("logs").insert({
+      const { error } = await supabase.from("logs").insert({
         user_id: user.id,
         book_id: bookId,
         club_id: clubId,
@@ -180,6 +182,11 @@ export function ClubBookSheet({
         kind: "note",
         review: personalNotes.trim(),
       });
+      if (error) {
+        setSavingNotes(false);
+        toast("Couldn't save your notes — try again", "error");
+        return;
+      }
     }
     setSavingNotes(false);
   }
@@ -201,8 +208,9 @@ export function ClubBookSheet({
       .eq("club_id", clubId)
       .in("kind", ["review", "reread"]);
 
+    let saveErr = null;
     if (value > 0) {
-      await supabase.from("logs").insert({
+      const { error } = await supabase.from("logs").insert({
         user_id: user.id,
         book_id: bookId,
         club_id: clubId,
@@ -210,8 +218,13 @@ export function ClubBookSheet({
         kind: "review",
         rating: value,
       });
+      saveErr = error;
     }
     setSavingRating(false);
+    if (saveErr) {
+      toast("Couldn't save your rating — try again", "error");
+      return;
+    }
     onUpdate();
   }
 
@@ -227,8 +240,12 @@ export function ClubBookSheet({
       if (res.ok) {
         onUpdate();
         onClose();
+      } else {
+        toast("Couldn't remove the book — try again", "error");
       }
-    } catch {}
+    } catch {
+      toast("Couldn't remove the book — try again", "error");
+    }
     setRemoving(false);
     setConfirmRemove(false);
   }

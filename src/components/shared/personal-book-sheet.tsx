@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { StarRating } from "@/components/ui/star-rating";
+import { useToast } from "@/components/ui/toast";
 import { X, Plus, Loader2, Sparkles, Trash2, Star, RotateCw } from "lucide-react";
 
 interface PersonalQuote {
@@ -79,6 +80,7 @@ export function PersonalBookSheet({
   const [savingReread, setSavingReread] = useState(false);
 
   const supabase = createClient();
+  const toast = useToast();
 
   const loadQuotes = useCallback(async () => {
     if (!bookId) return;
@@ -132,17 +134,21 @@ export function PersonalBookSheet({
     setSavingReread(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSavingReread(false); return; }
-    await supabase.from("logs").insert({
+    const { error } = await supabase.from("logs").insert({
       user_id: user.id,
       book_id: bookId,
       kind: "reread",
       rating: rereadRating > 0 ? rereadRating : null,
       ...(rereadDate ? { created_at: new Date(rereadDate + "T12:00:00").toISOString() } : {}),
     });
+    setSavingReread(false);
+    if (error) {
+      toast("Couldn't log the reread — try again", "error");
+      return;
+    }
     setLoggingReread(false);
     setRereadDate("");
     setRereadRating(0);
-    setSavingReread(false);
     loadRereads();
     onUpdate();
   }
@@ -238,12 +244,17 @@ export function PersonalBookSheet({
       .eq("kind", "review");
 
     if (value > 0) {
-      await supabase.from("logs").insert({
+      const { error } = await supabase.from("logs").insert({
         user_id: user.id,
         book_id: bookId,
         kind: "review",
         rating: value,
       });
+      if (error) {
+        setSavingRating(false);
+        toast("Couldn't save your rating — try again", "error");
+        return;
+      }
     }
     setSavingRating(false);
     onUpdate();
@@ -289,12 +300,17 @@ export function PersonalBookSheet({
       .eq("kind", "note");
 
     if (personalNotes.trim()) {
-      await supabase.from("logs").insert({
+      const { error } = await supabase.from("logs").insert({
         user_id: user.id,
         book_id: bookId,
         kind: "note",
         review: personalNotes.trim(),
       });
+      if (error) {
+        setSavingNotes(false);
+        toast("Couldn't save your notes — try again", "error");
+        return;
+      }
     }
     setSavingNotes(false);
   }
@@ -343,8 +359,12 @@ export function PersonalBookSheet({
       if (res.ok) {
         onUpdate();
         onClose();
+      } else {
+        toast("Couldn't remove the book — try again", "error");
       }
-    } catch {}
+    } catch {
+      toast("Couldn't remove the book — try again", "error");
+    }
     setRemoving(false);
     setConfirmRemove(false);
   }

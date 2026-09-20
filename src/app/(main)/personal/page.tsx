@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { Loading } from "@/components/ui/loading";
 import { PersonalBookSheet } from "@/components/shared/personal-book-sheet";
+import { useToast } from "@/components/ui/toast";
 import { Search, Loader2, BookOpen, Plus, LogOut, ChevronLeft, ChevronRight, CheckCircle2, RotateCw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -33,6 +34,7 @@ export default function PersonalPage() {
 
   const supabase = createClient();
   const router = useRouter();
+  const toast = useToast();
 
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -266,13 +268,20 @@ export default function PersonalPage() {
   async function finishReadingBook(userBookId: string) {
     setFinishingId(userBookId);
     try {
-      await fetch("/api/personal", {
+      const res = await fetch("/api/personal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "finish_book", userBookId }),
       });
-      await loadData();
-    } catch {}
+      if (res.ok) {
+        await loadData();
+        toast("Marked as finished — it's on your shelf now", "success");
+      } else {
+        toast("Couldn't mark it finished — try again", "error");
+      }
+    } catch {
+      toast("Couldn't mark it finished — try again", "error");
+    }
     setFinishingId(null);
   }
 
@@ -318,16 +327,22 @@ export default function PersonalPage() {
   async function handlePickBook(vol: GoogleBooksVolume) {
     setPickSaving(true);
     try {
-      await fetch("/api/personal", {
+      const res = await fetch("/api/personal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "add_book", googleBooksVolume: vol, shelf: pickMode }),
       });
-      setPickOpen(false);
-      setPickQuery("");
-      setPickResults([]);
-      loadData();
-    } catch {}
+      if (!res.ok) {
+        toast("Couldn't add that book — try again", "error");
+      } else {
+        setPickOpen(false);
+        setPickQuery("");
+        setPickResults([]);
+        loadData();
+      }
+    } catch {
+      toast("Couldn't add that book — try again", "error");
+    }
     setPickSaving(false);
   }
 

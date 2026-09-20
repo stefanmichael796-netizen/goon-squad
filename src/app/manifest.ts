@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Track what you read before it slips past.",
     start_url: "/",
     display: "standalone",
-    background_color: "#FFFFFF",
+    background_color: "#FAF7F1",
     theme_color: "#1B2A4E",
     icons: [
       { src: "/icons/192", sizes: "192x192", type: "image/png", purpose: "any" },

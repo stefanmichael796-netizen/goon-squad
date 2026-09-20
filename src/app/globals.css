@@ -15,22 +15,24 @@
   --color-dark-muted: #8A93A6;
   --color-dark-border: #26304A;
 
+  --color-ochre: #C79A3A;
+
   --font-serif: 'Lora', Georgia, 'Times New Roman', serif;
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 :root {
-  /* Minimalist light: white base, navy accent, grey + black ink */
+  /* Warm minimalist: cream paper base, navy ink accent, gold stars */
   color-scheme: light;
-  --background: #FFFFFF;
-  --foreground: #11151C;
-  --surface: #F5F6F8;
-  --muted: #6B7280;
-  --border: #E5E7EB;
+  --background: #FAF7F1;
+  --foreground: #211E18;
+  --surface: #F2ECE1;
+  --muted: #6E6555;
+  --border: #E6DED0;
   --accent: #1B2A4E;
 
   /* Flat navy — no gradients in the minimalist theme */
-  --gradient-base: #FFFFFF;
+  --gradient-base: #FAF7F1;
   --gradient-accent: #1B2A4E;
   --gradient-accent-soft: rgba(27, 42, 78, 0.08);
 }

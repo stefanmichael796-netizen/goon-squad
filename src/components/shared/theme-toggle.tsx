@@ -22,7 +22,7 @@ export function ThemeToggle() {
     } catch {}
     // Keep the mobile browser's status-bar tint in sync with the theme.
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", next ? "#0B1120" : "#FFFFFF");
+    if (meta) meta.setAttribute("content", next ? "#0B1120" : "#FAF7F1");
   }
 
   return (

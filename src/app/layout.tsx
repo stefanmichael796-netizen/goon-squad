@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: "light dark",
-  themeColor: "#FFFFFF",
+  themeColor: "#FAF7F1",
 };
 
 // Applies the saved (or system) theme before first paint, so there's no flash

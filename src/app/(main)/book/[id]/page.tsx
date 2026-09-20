@@ -6,10 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { BookCover } from "@/components/ui/book-cover";
 import { StarRating } from "@/components/ui/star-rating";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Loading } from "@/components/ui/loading";
+import { PageSkeleton } from "@/components/ui/skeleton";
 import { AddQuoteSheet } from "@/components/shared/add-quote-sheet";
 import { LogBookSheet } from "@/components/shared/log-book-sheet";
-import { ArrowLeft, Quote, BookPlus, Trash2, RotateCcw } from "lucide-react";
+import { ArrowLeft, Quote, BookPlus, Trash2, RotateCcw, MessageCircle, History } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import Link from "next/link";
 import type { Book, Log, Quote as QuoteType, UserBook, ClubBook } from "@/lib/types";
@@ -122,38 +122,49 @@ export default function BookDetailPage() {
     setQuotes([]);
   }
 
-  if (loading) return <Loading />;
+  if (loading) return <PageSkeleton />;
   if (!book) return <EmptyState message="Book not found." />;
 
+  const rereadCount = logs.filter((l) => l.kind === "reread").length;
+
   return (
-    <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6">
+    <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6 animate-fade-in">
       <Link
         href="/club"
-        className="inline-flex items-center gap-1 text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+        className="inline-flex items-center gap-1 text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors press"
       >
         <ArrowLeft className="w-4 h-4" /> Back
       </Link>
 
-      <div className="flex gap-4">
+      {/* Hero */}
+      <div className="flex gap-5">
         <BookCover coverUrl={book.cover_url} title={book.title} size="xl" />
-        <div className="flex-1 min-w-0 space-y-1">
-          <h1 className="font-serif font-bold text-2xl text-[var(--foreground)] leading-tight">
+        <div className="flex-1 min-w-0 space-y-1.5 pt-1">
+          {userBook && (
+            <span className="inline-block text-[10px] font-semibold text-[var(--accent)] uppercase tracking-[0.15em]">
+              {userBook.shelf === "reading" ? "Now reading" : userBook.shelf === "want" ? "Want to read" : "Read"}
+            </span>
+          )}
+          <h1 className="font-serif font-bold text-2xl text-[var(--foreground)] leading-[1.15]">
             {book.title}
           </h1>
-          <p className="text-[var(--muted)]">{book.authors?.join(", ")}</p>
-          {book.publisher && (
-            <p className="text-sm text-[var(--muted)]">{book.publisher}</p>
-          )}
-          <div className="flex gap-3 text-sm text-[var(--muted)]">
+          <p className="text-[var(--muted)] italic">{book.authors?.join(", ")}</p>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-[var(--muted)] pt-0.5">
+            {book.publisher && <span>{book.publisher}</span>}
             {book.published_date && <span>{book.published_date}</span>}
             {book.page_count && <span>{book.page_count} pages</span>}
           </div>
+          {rereadCount > 0 && (
+            <p className="text-xs text-[var(--muted)] flex items-center gap-1 pt-0.5">
+              <RotateCcw className="w-3 h-3" /> Read {rereadCount + 1} times
+            </p>
+          )}
           {book.categories && book.categories.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {book.categories.map((cat) => (
+            <div className="flex flex-wrap gap-1 pt-1.5">
+              {book.categories.slice(0, 3).map((cat) => (
                 <span
                   key={cat}
-                  className="text-xs px-2 py-0.5 rounded-full bg-[var(--border)] text-[var(--muted)]"
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--surface)] border border-[var(--border)] text-[var(--muted)]"
                 >
                   {cat}
                 </span>
@@ -163,36 +174,25 @@ export default function BookDetailPage() {
         </div>
       </div>
 
-      {/* Read count */}
-      {(() => {
-        const rereads = logs.filter((l) => l.kind === "reread").length;
-        if (rereads === 0) return null;
-        return (
-          <p className="text-sm text-[var(--muted)]">
-            Read {rereads + 1} times
-          </p>
-        );
-      })()}
-
       {/* Action buttons */}
       <div className="flex gap-2">
         <button
           onClick={() => setLogSheetOpen(true)}
-          className="flex-1 py-2.5 rounded-lg bg-coral text-white font-medium flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
+          className="flex-1 py-2.5 rounded-lg bg-coral text-white font-medium flex items-center justify-center gap-2 transition-opacity hover:opacity-90 press"
         >
           <BookPlus className="w-4 h-4" /> Log
         </button>
         {userBook?.shelf === "read" && (
           <button
             onClick={() => setRereadSheetOpen(true)}
-            className="flex-1 py-2.5 rounded-lg border border-coral text-coral font-medium flex items-center justify-center gap-2 transition-colors hover:bg-coral/10"
+            className="flex-1 py-2.5 rounded-lg border border-coral text-coral font-medium flex items-center justify-center gap-2 transition-colors hover:bg-coral/10 press"
           >
             <RotateCcw className="w-4 h-4" /> Re-read
           </button>
         )}
         <button
           onClick={() => setQuoteSheetOpen(true)}
-          className="flex-1 py-2.5 rounded-lg border border-[var(--border)] text-[var(--foreground)] font-medium flex items-center justify-center gap-2 transition-colors hover:bg-[var(--surface)]"
+          className="flex-1 py-2.5 rounded-lg border border-[var(--border)] text-[var(--foreground)] font-medium flex items-center justify-center gap-2 transition-colors hover:bg-[var(--surface)] press"
         >
           <Quote className="w-4 h-4" /> Quote
         </button>
@@ -200,13 +200,13 @@ export default function BookDetailPage() {
 
       {/* Shelf toggle */}
       <div>
-        <p className="text-sm font-medium text-[var(--foreground)] mb-2">Shelf</p>
+        <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">Shelf</p>
         <div className="flex gap-2">
           {(["reading", "want", "read"] as const).map((s) => (
             <button
               key={s}
               onClick={() => changeShelf(s)}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors press ${
                 userBook?.shelf === s
                   ? "bg-coral text-white"
                   : "bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)]"
@@ -221,19 +221,19 @@ export default function BookDetailPage() {
       {clubBook && (
         <Link
           href={`/club/discussion/${clubBook.id}`}
-          className="block p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-sm text-coral hover:underline"
+          className="flex items-center gap-2 p-3.5 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-sm text-coral font-medium hover:bg-[var(--background)] transition-colors press"
         >
-          View club discussion for this book
+          <MessageCircle className="w-4 h-4" /> View club discussion for this book
         </Link>
       )}
 
       {/* Description */}
       {book.description && (
-        <section>
-          <h2 className="font-serif font-semibold text-lg text-[var(--foreground)] mb-2">
+        <section className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-5">
+          <h2 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
             About
           </h2>
-          <p className="text-sm text-[var(--foreground)] opacity-80 leading-relaxed line-clamp-6">
+          <p className="text-sm text-[var(--foreground)] font-serif leading-relaxed line-clamp-6">
             {book.description.replace(/<[^>]*>/g, "")}
           </p>
         </section>
@@ -241,25 +241,25 @@ export default function BookDetailPage() {
 
       {/* My log history */}
       <section>
-        <h2 className="font-serif font-semibold text-lg text-[var(--foreground)] mb-3">
+        <h2 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-3">
           My history
         </h2>
         {logs.length === 0 ? (
-          <EmptyState message="No activity for this book yet." />
+          <EmptyState message="No activity for this book yet." icon={History} />
         ) : (
           <div className="space-y-2">
             {logs.map((log) => (
-              <div key={log.id} className="p-3 rounded-lg bg-[var(--surface)]">
+              <div key={log.id} className="p-3.5 rounded-xl bg-[var(--surface)] border border-[var(--border)]">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-[var(--muted)] capitalize">{log.kind.replace("_", " ")}</span>
+                  <span className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">{log.kind.replace("_", " ")}</span>
                   <span className="text-xs text-[var(--muted)]">{timeAgo(log.created_at)}</span>
                 </div>
-                {log.rating && <StarRating rating={log.rating} size="sm" readonly />}
+                {log.rating && <div className="mt-1"><StarRating rating={log.rating} size="sm" readonly /></div>}
                 {log.review && (
-                  <p className="text-sm font-serif text-[var(--foreground)] mt-1">{log.review}</p>
+                  <p className="text-sm font-serif text-[var(--foreground)] mt-1.5 leading-relaxed">{log.review}</p>
                 )}
                 {log.shelf && (
-                  <p className="text-sm text-[var(--muted)]">
+                  <p className="text-sm text-[var(--muted)] mt-0.5">
                     {log.shelf === "want" ? "Want to read" : log.shelf}
                   </p>
                 )}
@@ -272,17 +272,17 @@ export default function BookDetailPage() {
       {/* Quotes for this book */}
       {quotes.length > 0 && (
         <section>
-          <h2 className="font-serif font-semibold text-lg text-[var(--foreground)] mb-3">
+          <h2 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-3">
             Quotes
           </h2>
           <div className="space-y-3">
             {quotes.map((q) => (
-              <div key={q.id} className="p-4 rounded-lg bg-[var(--surface)]">
+              <div key={q.id} className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] border-l-2 border-l-[var(--accent)]">
                 <blockquote className="font-serif italic text-[var(--foreground)] leading-relaxed">
                   &ldquo;{q.body}&rdquo;
                 </blockquote>
                 {q.page_number && (
-                  <p className="text-sm text-[var(--muted)] mt-1">p.{q.page_number}</p>
+                  <p className="text-xs text-[var(--muted)] mt-1.5 text-right">p.{q.page_number}</p>
                 )}
                 {q.note && (
                   <p className="text-sm text-[var(--muted)] mt-1">{q.note}</p>
@@ -296,7 +296,7 @@ export default function BookDetailPage() {
       {userBook && (
         <button
           onClick={removeBook}
-          className="w-full py-2.5 text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors flex items-center justify-center gap-2"
+          className="w-full py-2.5 text-sm text-[var(--muted)] hover:text-red-500 transition-colors flex items-center justify-center gap-2"
         >
           <Trash2 className="w-4 h-4" /> Remove from shelves
         </button>

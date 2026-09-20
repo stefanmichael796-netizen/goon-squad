@@ -21,6 +21,7 @@
 
 :root {
   /* Minimalist light: white base, navy accent, grey + black ink */
+  color-scheme: light;
   --background: #FFFFFF;
   --foreground: #11151C;
   --surface: #F5F6F8;
@@ -35,6 +36,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: #0B1120;
   --foreground: #E8EBF0;
   --surface: #141C2E;
@@ -66,6 +68,27 @@ body {
 .bg-coral {
   background-color: var(--accent);
   background-image: none;
+}
+
+/* The `coral` utilities are baked as literal navy by @theme inline, so in dark
+   mode they'd stay navy on a near-black background. Re-point the accent-coloured
+   ones at the live --accent variable so they adapt with the theme. */
+.dark .text-coral,
+.dark .hover\:text-coral:hover {
+  color: var(--accent);
+}
+.dark .border-coral {
+  border-color: var(--accent);
+}
+.dark .border-coral\/30 {
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.dark .bg-coral\/20 {
+  background-color: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.dark .bg-coral\/10,
+.dark .hover\:bg-coral\/10:hover {
+  background-color: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 input::placeholder,

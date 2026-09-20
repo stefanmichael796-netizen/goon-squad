@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Users, BookMarked } from "lucide-react";
+import { ThemeToggle } from "@/components/shared/theme-toggle";
 
 const tabs = [
   { href: "/club", label: "Club", icon: Users },
@@ -18,7 +19,7 @@ export function BottomNav() {
         <Link href="/club" className="font-serif font-bold text-lg text-coral">
           Goon Squad
         </Link>
-        <div className="flex gap-1">
+        <div className="flex items-center gap-1">
           {tabs.map((tab) => {
             const active = pathname.startsWith(tab.href);
             const Icon = tab.icon;
@@ -37,6 +38,7 @@ export function BottomNav() {
               </Link>
             );
           })}
+          <ThemeToggle />
         </div>
       </div>
     </nav>

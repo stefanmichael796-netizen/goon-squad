@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -9,29 +9,66 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: readBooks } = await supabase
-    .from("user_books")
-    .select("*, book:books(*)")
-    .eq("user_id", user.id)
-    .eq("shelf", "read");
+  const scope = new URL(request.url).searchParams.get("scope") === "club" ? "club" : "me";
 
-  const { data: allBooks } = await supabase
-    .from("user_books")
-    .select("*, book:books(*)")
-    .eq("user_id", user.id);
+  // Build a common `books` shape ({ finished_at, book_id, book }) for whichever
+  // scope we're in, so all the aggregation below is identical.
+  let clubId: string | null = null;
+  let books: { finished_at: string | null; book_id: string; book: any }[] = [];
 
-  const { data: userQuotes } = await supabase
-    .from("quotes")
-    .select("*, book:books(*)")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(1);
+  const emptyResponse = {
+    scope,
+    booksPerMonth: [],
+    topAuthors: [],
+    authorCountries: [],
+    genres: [],
+    members: [],
+    readingPace: { totalBooks: 0, monthsSinceFirst: 0, booksPerMonth: 0, totalPages: 0, pagesPerMonth: 0 },
+    yearInReview: {
+      totalBooks: 0, totalPages: 0, longestBook: null, shortestBook: null,
+      mostReadAuthor: null, topRatedBook: null, pulledQuote: null, authorCountries: [],
+    },
+  };
 
-  const books = readBooks || [];
+  if (scope === "club") {
+    const { data: membership } = await supabase
+      .from("club_members")
+      .select("club_id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .single();
 
-  // Fill in author nationality for any read books that don't have it yet, using
-  // one batched Claude call. Cached on the books row (author_countries), so this
-  // only ever runs once per book — later loads skip straight past it.
+    if (!membership) return NextResponse.json(emptyResponse);
+    clubId = membership.club_id;
+
+    const { data: pastBooks } = await supabase
+      .from("club_books")
+      .select("book_id, ended_on, book:books(*)")
+      .eq("club_id", clubId)
+      .eq("status", "past");
+
+    books = (pastBooks || []).map((cb: any) => ({
+      finished_at: cb.ended_on,
+      book_id: cb.book_id,
+      book: cb.book,
+    }));
+  } else {
+    const { data: readBooks } = await supabase
+      .from("user_books")
+      .select("*, book:books(*)")
+      .eq("user_id", user.id)
+      .eq("shelf", "read");
+
+    books = (readBooks || []).map((ub: any) => ({
+      finished_at: ub.finished_at,
+      book_id: ub.book_id,
+      book: ub.book,
+    }));
+  }
+
+  // Fill in author nationality for any books that don't have it yet, using one
+  // batched Claude call. Cached on the books row (author_countries), so this only
+  // ever runs once per book — later loads skip straight past it.
   const missingCountry = Array.from(
     new Map(
       books
@@ -110,7 +147,6 @@ export async function GET() {
         if (b && entry.country) {
           const countries = [entry.country];
           await supabase.from("books").update({ author_countries: countries }).eq("id", b.id);
-          // reflect it in the in-memory data so the breakdown below is fresh
           books.forEach((ub) => {
             if ((ub.book as any)?.id === b.id) (ub.book as any).author_countries = countries;
           });
@@ -233,19 +269,87 @@ export async function GET() {
   });
   const mostReadAuthor = Object.entries(yearAuthorCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
-  // Find the top-rated book this year from logs
-  const { data: yearLogs } = await supabase
-    .from("logs")
-    .select("*, book:books(*)")
-    .eq("user_id", user.id)
-    .eq("kind", "review")
-    .not("rating", "is", null)
-    .order("rating", { ascending: false })
-    .limit(50);
+  // Top-rated + a pulled quote + (club) member leaderboard — scope-aware.
+  let topRatedBook: { title: string; rating: number } | null = null;
+  let pulledQuote: { body: string; bookTitle: string } | null = null;
+  let members: { name: string; booksRated: number }[] = [];
 
-  const topRatedLog = (yearLogs || []).find((l) => {
-    return yearBooks.some((yb) => yb.book_id === l.book_id);
-  });
+  if (scope === "club" && clubId) {
+    const { data: clubLogs } = await supabase
+      .from("logs")
+      .select("book_id, rating, user_id, book:books(title)")
+      .eq("club_id", clubId)
+      .in("kind", ["review", "reread"])
+      .not("rating", "is", null);
+
+    // Average rating per book, then pick the best among this year's books.
+    const agg: Record<string, { sum: number; n: number; title: string }> = {};
+    (clubLogs || []).forEach((l: any) => {
+      const cur = agg[l.book_id] || { sum: 0, n: 0, title: (l.book as any)?.title };
+      cur.sum += l.rating;
+      cur.n += 1;
+      agg[l.book_id] = cur;
+    });
+    yearBooks.forEach((yb) => {
+      const a = agg[yb.book_id];
+      if (a) {
+        const avg = Math.round((a.sum / a.n) * 10) / 10;
+        if (!topRatedBook || avg > topRatedBook.rating) {
+          topRatedBook = { title: a.title || (yb.book as any)?.title, rating: avg };
+        }
+      }
+    });
+
+    // Member leaderboard: how many distinct books each member has rated.
+    const perMember: Record<string, Set<string>> = {};
+    (clubLogs || []).forEach((l: any) => {
+      (perMember[l.user_id] ||= new Set()).add(l.book_id);
+    });
+    const { data: memberRows } = await supabase
+      .from("club_members")
+      .select("user_id, profile:profiles(display_name)")
+      .eq("club_id", clubId);
+    members = (memberRows || [])
+      .map((m: any) => ({
+        name: (m.profile as any)?.display_name || "Someone",
+        booksRated: perMember[m.user_id]?.size || 0,
+      }))
+      .sort((a, b) => b.booksRated - a.booksRated);
+
+    const { data: clubQuotes } = await supabase
+      .from("quotes")
+      .select("body, book:books(title)")
+      .eq("club_id", clubId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    pulledQuote = clubQuotes?.[0]
+      ? { body: clubQuotes[0].body, bookTitle: (clubQuotes[0].book as any)?.title }
+      : null;
+  } else {
+    const { data: yearLogs } = await supabase
+      .from("logs")
+      .select("*, book:books(*)")
+      .eq("user_id", user.id)
+      .eq("kind", "review")
+      .not("rating", "is", null)
+      .order("rating", { ascending: false })
+      .limit(50);
+
+    const topRatedLog = (yearLogs || []).find((l) => yearBooks.some((yb) => yb.book_id === l.book_id));
+    topRatedBook = topRatedLog
+      ? { title: (topRatedLog.book as any)?.title, rating: topRatedLog.rating }
+      : null;
+
+    const { data: userQuotes } = await supabase
+      .from("quotes")
+      .select("*, book:books(*)")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    pulledQuote = userQuotes?.[0]
+      ? { body: userQuotes[0].body, bookTitle: (userQuotes[0].book as any)?.title }
+      : null;
+  }
 
   const yearInReview = {
     totalBooks: yearBooks.length,
@@ -253,16 +357,18 @@ export async function GET() {
     longestBook: longestBook ? { title: (longestBook.book as any)?.title, pages: (longestBook.book as any)?.page_count } : null,
     shortestBook: shortestBook ? { title: (shortestBook.book as any)?.title, pages: (shortestBook.book as any)?.page_count } : null,
     mostReadAuthor,
-    topRatedBook: topRatedLog ? { title: (topRatedLog.book as any)?.title, rating: topRatedLog.rating } : null,
-    pulledQuote: userQuotes?.[0] ? { body: userQuotes[0].body, bookTitle: (userQuotes[0].book as any)?.title } : null,
+    topRatedBook,
+    pulledQuote,
     authorCountries: authorCountries.filter((ac) => ac.country !== "Unknown"),
   };
 
   return NextResponse.json({
+    scope,
     booksPerMonth,
     topAuthors,
     authorCountries,
     genres,
+    members,
     readingPace,
     yearInReview,
   });

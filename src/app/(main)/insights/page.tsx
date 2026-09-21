@@ -15,10 +15,12 @@ import {
 } from "recharts";
 
 interface InsightsData {
+  scope: "me" | "club";
   booksPerMonth: { month: string; current: number; previous: number }[];
   topAuthors: { name: string; count: number; covers: string[] }[];
   authorCountries: { country: string; count: number }[];
   genres: { genre: string; count: number }[];
+  members: { name: string; booksRated: number }[];
   readingPace: {
     totalBooks: number;
     monthsSinceFirst: number;
@@ -56,35 +58,70 @@ function StatTile({ value, label }: { value: string | number; label: string }) {
 export default function InsightsPage() {
   const [data, setData] = useState<InsightsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [scope, setScope] = useState<"me" | "club">("me");
   const [tab, setTab] = useState<"stats" | "year">("stats");
 
   useEffect(() => {
+    let active = true;
+    setLoading(true);
     async function load() {
-      const res = await fetch("/api/insights");
-      if (res.ok) {
+      const res = await fetch(`/api/insights?scope=${scope}`);
+      if (active && res.ok) {
         setData(await res.json());
       }
-      setLoading(false);
+      if (active) setLoading(false);
     }
     load();
-  }, []);
+    return () => { active = false; };
+  }, [scope]);
+
+  const ScopeToggle = () => (
+    <div className="inline-flex rounded-lg bg-[var(--surface)] border border-[var(--border)] p-0.5">
+      {(["me", "club"] as const).map((s) => (
+        <button
+          key={s}
+          onClick={() => setScope(s)}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            scope === s ? "bg-coral text-white" : "text-[var(--muted)] hover:text-[var(--foreground)]"
+          }`}
+        >
+          {s === "me" ? "You" : "Club"}
+        </button>
+      ))}
+    </div>
+  );
 
   if (loading) return <PageSkeleton />;
 
   if (!data || data.readingPace.totalBooks === 0) {
     return (
       <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6 animate-fade-in">
-        <h1 className="font-serif font-bold text-2xl text-[var(--foreground)]">Insights</h1>
-        <EmptyState message="Come back after a few books — your reading story will take shape here." icon={BarChart3} />
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="font-serif font-bold text-2xl text-[var(--foreground)]">Insights</h1>
+          <ScopeToggle />
+        </div>
+        <EmptyState
+          message={
+            scope === "club"
+              ? "Once the club has finished a few books, its story shows up here."
+              : "Come back after a few books — your reading story will take shape here."
+          }
+          icon={BarChart3}
+        />
       </div>
     );
   }
 
   return (
     <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6 animate-fade-in">
-      <div>
-        <h1 className="font-serif font-bold text-2xl text-[var(--foreground)]">Insights</h1>
-        <p className="text-sm text-[var(--muted)] mt-0.5">Your reading, by the numbers.</p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="font-serif font-bold text-2xl text-[var(--foreground)]">Insights</h1>
+          <p className="text-sm text-[var(--muted)] mt-0.5">
+            {scope === "club" ? "The whole squad, by the numbers." : "Your reading, by the numbers."}
+          </p>
+        </div>
+        <ScopeToggle />
       </div>
 
       <div className="flex gap-2">
@@ -178,6 +215,26 @@ export default function InsightsPage() {
               ))}
             </div>
           </section>
+
+          {/* Squad leaderboard (club scope) */}
+          {data.scope === "club" && data.members.some((m) => m.booksRated > 0) && (
+            <section>
+              <SectionLabel>Squad leaderboard</SectionLabel>
+              <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] divide-y divide-[var(--border)]">
+                {data.members
+                  .filter((m) => m.booksRated > 0)
+                  .map((m, i) => (
+                    <div key={m.name + i} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className="text-sm font-bold text-[var(--muted)] w-5 text-right">{i + 1}</span>
+                      <p className="flex-1 text-sm font-medium text-[var(--foreground)] truncate">{m.name}</p>
+                      <span className="text-xs text-[var(--muted)]">
+                        {m.booksRated} rated
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </section>
+          )}
 
           {/* Author countries */}
           {data.authorCountries.length > 0 && (

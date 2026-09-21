@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loading } from "@/components/ui/loading";
+import { PageSkeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { BarChart3 } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -39,6 +38,21 @@ interface InsightsData {
   };
 }
 
+const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+  <h2 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-3">
+    {children}
+  </h2>
+);
+
+function StatTile({ value, label }: { value: string | number; label: string }) {
+  return (
+    <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] text-center">
+      <p className="text-2xl font-bold text-[var(--accent)]">{value}</p>
+      <p className="text-xs text-[var(--muted)] mt-0.5">{label}</p>
+    </div>
+  );
+}
+
 export default function InsightsPage() {
   const [data, setData] = useState<InsightsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,54 +69,41 @@ export default function InsightsPage() {
     load();
   }, []);
 
-  if (loading) return <Loading />;
+  if (loading) return <PageSkeleton />;
 
   if (!data || data.readingPace.totalBooks === 0) {
     return (
-      <div className="max-w-lg mx-auto w-full px-4 py-6">
-        <Link
-          href="/personal"
-          className="inline-flex items-center gap-1 text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors mb-6"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back
-        </Link>
-        <EmptyState message="Come back after a few books." />
+      <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6 animate-fade-in">
+        <h1 className="font-serif font-bold text-2xl text-[var(--foreground)]">Insights</h1>
+        <EmptyState message="Come back after a few books — your reading story will take shape here." icon={BarChart3} />
       </div>
     );
   }
 
   return (
-    <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <Link
-          href="/personal"
-          className="inline-flex items-center gap-1 text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back
-        </Link>
-        <h1 className="font-serif font-bold text-xl text-[var(--foreground)]">
-          Insights
-        </h1>
-        <div className="w-16" />
+    <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6 animate-fade-in">
+      <div>
+        <h1 className="font-serif font-bold text-2xl text-[var(--foreground)]">Insights</h1>
+        <p className="text-sm text-[var(--muted)] mt-0.5">Your reading, by the numbers.</p>
       </div>
 
       <div className="flex gap-2">
         <button
           onClick={() => setTab("stats")}
-          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors press ${
             tab === "stats"
               ? "bg-coral text-white"
-              : "text-[var(--muted)] hover:text-[var(--foreground)]"
+              : "bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)]"
           }`}
         >
           Statistics
         </button>
         <button
           onClick={() => setTab("year")}
-          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors press ${
             tab === "year"
               ? "bg-coral text-white"
-              : "text-[var(--muted)] hover:text-[var(--foreground)]"
+              : "bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)]"
           }`}
         >
           Year in Review
@@ -111,12 +112,21 @@ export default function InsightsPage() {
 
       {tab === "stats" && (
         <div className="space-y-8">
+          {/* Reading pace */}
+          <section>
+            <SectionLabel>Reading pace</SectionLabel>
+            <div className="grid grid-cols-2 gap-3">
+              <StatTile value={data.readingPace.totalBooks} label="books read" />
+              <StatTile value={data.readingPace.booksPerMonth} label="books / month" />
+              <StatTile value={data.readingPace.totalPages.toLocaleString()} label="total pages" />
+              <StatTile value={data.readingPace.pagesPerMonth.toLocaleString()} label="pages / month" />
+            </div>
+          </section>
+
           {/* Books per month chart */}
           <section>
-            <h2 className="font-serif font-semibold text-lg text-[var(--foreground)] mb-3">
-              Books per month
-            </h2>
-            <div className="h-48 w-full">
+            <SectionLabel>Books per month</SectionLabel>
+            <div className="h-48 w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-3">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.booksPerMonth} barGap={2}>
                   <XAxis
@@ -133,6 +143,7 @@ export default function InsightsPage() {
                     width={20}
                   />
                   <Tooltip
+                    cursor={{ fill: "var(--border)", opacity: 0.3 }}
                     contentStyle={{
                       backgroundColor: "var(--surface)",
                       border: "1px solid var(--border)",
@@ -141,10 +152,10 @@ export default function InsightsPage() {
                       fontSize: 12,
                     }}
                   />
-                  <Bar dataKey="previous" fill="var(--border)" radius={[2, 2, 0, 0]} name="Last year" />
-                  <Bar dataKey="current" radius={[2, 2, 0, 0]} name="This year">
+                  <Bar dataKey="previous" fill="var(--border)" radius={[3, 3, 0, 0]} name="Last year" />
+                  <Bar dataKey="current" radius={[3, 3, 0, 0]} name="This year">
                     {data.booksPerMonth.map((_, i) => (
-                      <Cell key={i} fill="#D98872" />
+                      <Cell key={i} fill="var(--accent)" />
                     ))}
                   </Bar>
                 </BarChart>
@@ -154,17 +165,13 @@ export default function InsightsPage() {
 
           {/* Top authors */}
           <section>
-            <h2 className="font-serif font-semibold text-lg text-[var(--foreground)] mb-3">
-              Top authors
-            </h2>
-            <div className="space-y-2">
+            <SectionLabel>Top authors</SectionLabel>
+            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] divide-y divide-[var(--border)]">
               {data.topAuthors.map((author, i) => (
-                <div key={author.name} className="flex items-center gap-3 p-2 rounded-lg">
-                  <span className="text-sm text-[var(--muted)] w-5 text-right">{i + 1}</span>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-[var(--foreground)]">{author.name}</p>
-                  </div>
-                  <span className="text-sm text-[var(--muted)]">
+                <div key={author.name} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="text-sm font-bold text-[var(--muted)] w-5 text-right">{i + 1}</span>
+                  <p className="flex-1 text-sm font-medium text-[var(--foreground)] truncate">{author.name}</p>
+                  <span className="text-xs text-[var(--muted)]">
                     {author.count} {author.count === 1 ? "book" : "books"}
                   </span>
                 </div>
@@ -175,12 +182,10 @@ export default function InsightsPage() {
           {/* Author countries */}
           {data.authorCountries.length > 0 && (
             <section>
-              <h2 className="font-serif font-semibold text-lg text-[var(--foreground)] mb-3">
-                Author countries
-              </h2>
-              <div className="space-y-2">
+              <SectionLabel>Author nationalities</SectionLabel>
+              <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] divide-y divide-[var(--border)]">
                 {data.authorCountries.map((ac) => (
-                  <div key={ac.country} className="flex items-center justify-between p-2">
+                  <div key={ac.country} className="flex items-center justify-between px-4 py-2.5">
                     <span className="text-sm text-[var(--foreground)]">{ac.country}</span>
                     <span className="text-sm text-[var(--muted)]">{ac.count}</span>
                   </div>
@@ -192,9 +197,7 @@ export default function InsightsPage() {
           {/* Genres */}
           {data.genres.length > 0 && (
             <section>
-              <h2 className="font-serif font-semibold text-lg text-[var(--foreground)] mb-3">
-                Genres
-              </h2>
+              <SectionLabel>Genres</SectionLabel>
               <div className="flex flex-wrap gap-2">
                 {data.genres.map((g) => (
                   <span
@@ -207,58 +210,27 @@ export default function InsightsPage() {
               </div>
             </section>
           )}
-
-          {/* Reading pace */}
-          <section>
-            <h2 className="font-serif font-semibold text-lg text-[var(--foreground)] mb-3">
-              Reading pace
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-4 rounded-lg bg-[var(--surface)] text-center">
-                <p className="text-2xl font-bold text-coral">{data.readingPace.totalBooks}</p>
-                <p className="text-xs text-[var(--muted)]">books read</p>
-              </div>
-              <div className="p-4 rounded-lg bg-[var(--surface)] text-center">
-                <p className="text-2xl font-bold text-coral">{data.readingPace.booksPerMonth}</p>
-                <p className="text-xs text-[var(--muted)]">books / month</p>
-              </div>
-              <div className="p-4 rounded-lg bg-[var(--surface)] text-center">
-                <p className="text-2xl font-bold text-coral">{data.readingPace.totalPages.toLocaleString()}</p>
-                <p className="text-xs text-[var(--muted)]">total pages</p>
-              </div>
-              <div className="p-4 rounded-lg bg-[var(--surface)] text-center">
-                <p className="text-2xl font-bold text-coral">{data.readingPace.pagesPerMonth.toLocaleString()}</p>
-                <p className="text-xs text-[var(--muted)]">pages / month</p>
-              </div>
-            </div>
-          </section>
         </div>
       )}
 
       {tab === "year" && (
-        <div className="space-y-6">
-          <h2 className="font-serif font-semibold text-xl text-[var(--foreground)] text-center">
+        <div className="space-y-4">
+          <h2 className="font-serif font-bold text-2xl text-[var(--foreground)] text-center">
             {new Date().getFullYear()} in Review
           </h2>
 
           {data.yearInReview.totalBooks === 0 ? (
-            <EmptyState message="No books finished this year yet." />
+            <EmptyState message="No books finished this year yet." icon={BarChart3} />
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-4 rounded-lg bg-[var(--surface)] text-center">
-                  <p className="text-3xl font-bold text-coral">{data.yearInReview.totalBooks}</p>
-                  <p className="text-xs text-[var(--muted)]">books read</p>
-                </div>
-                <div className="p-4 rounded-lg bg-[var(--surface)] text-center">
-                  <p className="text-3xl font-bold text-coral">{data.yearInReview.totalPages.toLocaleString()}</p>
-                  <p className="text-xs text-[var(--muted)]">pages turned</p>
-                </div>
+                <StatTile value={data.yearInReview.totalBooks} label="books read" />
+                <StatTile value={data.yearInReview.totalPages.toLocaleString()} label="pages turned" />
               </div>
 
               {data.yearInReview.longestBook && (
-                <div className="p-4 rounded-lg bg-[var(--surface)]">
-                  <p className="text-xs text-[var(--muted)] mb-1">Longest book</p>
+                <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
+                  <p className="text-xs text-[var(--muted)] uppercase tracking-wider mb-1">Longest book</p>
                   <p className="font-serif font-medium text-[var(--foreground)]">
                     {data.yearInReview.longestBook.title}
                   </p>
@@ -267,8 +239,8 @@ export default function InsightsPage() {
               )}
 
               {data.yearInReview.shortestBook && (
-                <div className="p-4 rounded-lg bg-[var(--surface)]">
-                  <p className="text-xs text-[var(--muted)] mb-1">Shortest book</p>
+                <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
+                  <p className="text-xs text-[var(--muted)] uppercase tracking-wider mb-1">Shortest book</p>
                   <p className="font-serif font-medium text-[var(--foreground)]">
                     {data.yearInReview.shortestBook.title}
                   </p>
@@ -277,8 +249,8 @@ export default function InsightsPage() {
               )}
 
               {data.yearInReview.mostReadAuthor && (
-                <div className="p-4 rounded-lg bg-[var(--surface)]">
-                  <p className="text-xs text-[var(--muted)] mb-1">Most-read author</p>
+                <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
+                  <p className="text-xs text-[var(--muted)] uppercase tracking-wider mb-1">Most-read author</p>
                   <p className="font-serif font-medium text-[var(--foreground)]">
                     {data.yearInReview.mostReadAuthor}
                   </p>
@@ -286,12 +258,12 @@ export default function InsightsPage() {
               )}
 
               {data.yearInReview.topRatedBook && (
-                <div className="p-4 rounded-lg bg-[var(--surface)]">
-                  <p className="text-xs text-[var(--muted)] mb-1">Top rated</p>
+                <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
+                  <p className="text-xs text-[var(--muted)] uppercase tracking-wider mb-1">Top rated</p>
                   <p className="font-serif font-medium text-[var(--foreground)]">
                     {data.yearInReview.topRatedBook.title}
                   </p>
-                  <p className="text-sm text-coral">
+                  <p className="text-sm text-ochre">
                     {"★".repeat(Math.floor(data.yearInReview.topRatedBook.rating))}
                     {data.yearInReview.topRatedBook.rating % 1 >= 0.5 ? "½" : ""}
                   </p>
@@ -299,25 +271,25 @@ export default function InsightsPage() {
               )}
 
               {data.yearInReview.pulledQuote && (
-                <div className="p-4 rounded-lg bg-[var(--surface)]">
-                  <p className="text-xs text-[var(--muted)] mb-2">A quote from this year</p>
+                <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] border-l-2 border-l-[var(--accent)]">
+                  <p className="text-xs text-[var(--muted)] uppercase tracking-wider mb-2">A quote from this year</p>
                   <blockquote className="font-serif italic text-[var(--foreground)] leading-relaxed">
                     &ldquo;{data.yearInReview.pulledQuote.body}&rdquo;
                   </blockquote>
-                  <p className="text-sm text-[var(--muted)] mt-1 font-serif">
+                  <p className="text-sm text-[var(--muted)] mt-1.5 font-serif">
                     {data.yearInReview.pulledQuote.bookTitle}
                   </p>
                 </div>
               )}
 
               {data.yearInReview.authorCountries.length > 0 && (
-                <div className="p-4 rounded-lg bg-[var(--surface)]">
-                  <p className="text-xs text-[var(--muted)] mb-2">Countries represented</p>
-                  <div className="flex flex-wrap gap-1">
+                <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
+                  <p className="text-xs text-[var(--muted)] uppercase tracking-wider mb-2">Countries represented</p>
+                  <div className="flex flex-wrap gap-1.5">
                     {data.yearInReview.authorCountries.map((ac) => (
                       <span
                         key={ac.country}
-                        className="text-sm px-2 py-0.5 rounded-full bg-[var(--border)] text-[var(--foreground)]"
+                        className="text-sm px-2.5 py-0.5 rounded-full bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)]"
                       >
                         {ac.country}
                       </span>

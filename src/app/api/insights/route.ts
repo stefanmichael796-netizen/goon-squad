@@ -28,6 +28,99 @@ export async function GET() {
     .limit(1);
 
   const books = readBooks || [];
+
+  // Fill in author nationality for any read books that don't have it yet, using
+  // one batched Claude call. Cached on the books row (author_countries), so this
+  // only ever runs once per book — later loads skip straight past it.
+  const missingCountry = Array.from(
+    new Map(
+      books
+        .map((ub) => ub.book as any)
+        .filter((b) => b && b.title && (!b.author_countries || b.author_countries.length === 0))
+        .map((b) => [b.id, b])
+    ).values()
+  );
+
+  if (missingCountry.length > 0 && process.env.ANTHROPIC_API_KEY) {
+    try {
+      const Anthropic = (await import("@anthropic-ai/sdk")).default;
+      const client = new Anthropic();
+      const batch = missingCountry.slice(0, 60);
+      const list = batch
+        .map(
+          (b: any, i: number) =>
+            `${i + 1}. "${b.title}"${b.authors?.length ? ` by ${b.authors.join(", ")}` : ""}`
+        )
+        .join("\n");
+
+      const message = await client.messages.create({
+        model: "claude-opus-4-8",
+        max_tokens: 2000,
+        thinking: { type: "disabled" },
+        output_config: {
+          format: {
+            type: "json_schema",
+            schema: {
+              type: "object",
+              properties: {
+                authors: {
+                  type: "array",
+                  description: "One entry per numbered book, in the same order as the list.",
+                  items: {
+                    type: "object",
+                    properties: {
+                      index: { type: "number", description: "The book's number from the list." },
+                      country: {
+                        type: "string",
+                        description:
+                          "The primary author's nationality as a plain country name (e.g. 'United States', 'Ireland', 'Japan', 'Nigeria'). Use 'Unknown' only if you genuinely do not know the author.",
+                      },
+                    },
+                    required: ["index", "country"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["authors"],
+              additionalProperties: false,
+            },
+          },
+        },
+        system: [
+          {
+            type: "text",
+            text: "You identify the nationality (country of origin or citizenship) of book authors. Be accurate and concise; return a single country name per author. If you genuinely do not know, return 'Unknown' rather than guessing.",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        messages: [
+          {
+            role: "user",
+            content: `For each book below, give the primary author's nationality as a country:\n\n${list}`,
+          },
+        ],
+      });
+
+      const textBlock = message.content.find((b) => b.type === "text");
+      const raw = textBlock && "text" in textBlock ? textBlock.text : "";
+      const parsed = JSON.parse(raw) as { authors: { index: number; country: string }[] };
+
+      for (const entry of parsed.authors || []) {
+        const b = batch[entry.index - 1] as any;
+        if (b && entry.country) {
+          const countries = [entry.country];
+          await supabase.from("books").update({ author_countries: countries }).eq("id", b.id);
+          // reflect it in the in-memory data so the breakdown below is fresh
+          books.forEach((ub) => {
+            if ((ub.book as any)?.id === b.id) (ub.book as any).author_countries = countries;
+          });
+        }
+      }
+    } catch {
+      // best-effort — if the lookup fails, those books just stay "Unknown"
+    }
+  }
+
   const currentYear = new Date().getFullYear();
   const lastYear = currentYear - 1;
 

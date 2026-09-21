@@ -29,9 +29,8 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Dormant features: insights is hidden for now, so any direct navigation to
-  // it bounces to the club page.
-  const dormantPaths = ["/insights"];
+  // No dormant features right now.
+  const dormantPaths: string[] = [];
   if (dormantPaths.some((p) => request.nextUrl.pathname.startsWith(p))) {
     const url = request.nextUrl.clone();
     url.pathname = "/club";

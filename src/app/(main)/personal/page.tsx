@@ -32,6 +32,7 @@ export default function PersonalPage() {
   const [finishingId, setFinishingId] = useState<string | null>(null);
   const overviewTriedRef = useRef<Set<string>>(new Set());
   const syncedRef = useRef(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const supabase = createClient();
   const router = useRouter();
@@ -315,14 +316,17 @@ export default function PersonalPage() {
 
   async function handlePickSearch(q: string) {
     setPickQuery(q);
-    if (q.length < 2) { setPickResults([]); return; }
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (q.length < 2) { setPickResults([]); setPickSearching(false); return; }
     setPickSearching(true);
-    try {
-      const res = await fetch(`/api/books/search?q=${encodeURIComponent(q)}`);
-      const data = await res.json();
-      setPickResults(data.items || []);
-    } catch { setPickResults([]); }
-    setPickSearching(false);
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/books/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        setPickResults(data.items || []);
+      } catch { setPickResults([]); }
+      setPickSearching(false);
+    }, 300);
   }
 
   function openPicker(mode: "reading" | "read") {

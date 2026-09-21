@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchBooks } from "@/lib/google-books";
+import { searchBooks, rankAndDedupeVolumes } from "@/lib/google-books";
 
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q");
@@ -11,5 +11,5 @@ export async function GET(request: NextRequest) {
   if (!result.ok) {
     return NextResponse.json({ items: [], error: result.error }, { status: 200 });
   }
-  return NextResponse.json({ items: result.items });
+  return NextResponse.json({ items: rankAndDedupeVolumes(result.items, q, 15) });
 }

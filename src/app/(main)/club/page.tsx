@@ -48,6 +48,7 @@ export default function ClubPage() {
   const [selectedBook, setSelectedBook] = useState<BookWithRatings | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [clubAction, setClubAction] = useState<"create" | "join">("create");
   const [clubName, setClubName] = useState("");
@@ -323,14 +324,17 @@ export default function ClubPage() {
 
   async function handlePickSearch(q: string) {
     setPickQuery(q);
-    if (q.length < 2) { setPickResults([]); return; }
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (q.length < 2) { setPickResults([]); setPickSearching(false); return; }
     setPickSearching(true);
-    try {
-      const res = await fetch(`/api/books/search?q=${encodeURIComponent(q)}`);
-      const data = await res.json();
-      setPickResults(data.items || []);
-    } catch { setPickResults([]); }
-    setPickSearching(false);
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/books/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        setPickResults(data.items || []);
+      } catch { setPickResults([]); }
+      setPickSearching(false);
+    }, 300);
   }
 
   function openPicker(mode: "current" | "past") {

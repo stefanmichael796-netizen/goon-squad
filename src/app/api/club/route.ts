@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { generateInviteCode } from "@/lib/utils";
-import { volumeToBook } from "@/lib/google-books";
+import { volumeToBook, hydrateVolume } from "@/lib/google-books";
 import { NextResponse } from "next/server";
 import type { GoogleBooksVolume } from "@/lib/types";
 
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You're not in a club" }, { status: 403 });
     }
 
-    const bookData = volumeToBook(googleBooksVolume);
+    const bookData = volumeToBook(await hydrateVolume(googleBooksVolume));
 
     const { data: existingBook } = await supabase
       .from("books")
@@ -191,7 +191,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You're not in a club" }, { status: 403 });
     }
 
-    const bookData = volumeToBook(googleBooksVolume);
+    const bookData = volumeToBook(await hydrateVolume(googleBooksVolume));
 
     const { data: existingBook } = await supabase
       .from("books")

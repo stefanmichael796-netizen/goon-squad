@@ -47,6 +47,21 @@ export async function getBookById(
   return res.json();
 }
 
+// Search results frequently omit pageCount (and sometimes description/categories).
+// If the picked volume has no pageCount, fetch the full record so the stored book
+// gets an accurate page count. Falls back to the original volume on any failure.
+export async function hydrateVolume(
+  volume: GoogleBooksVolume
+): Promise<GoogleBooksVolume> {
+  if (volume.volumeInfo?.pageCount) return volume;
+  try {
+    const full = await getBookById(volume.id);
+    return full || volume;
+  } catch {
+    return volume;
+  }
+}
+
 export function volumeToBook(volume: GoogleBooksVolume): Omit<Book, "id" | "created_at"> {
   const info = volume.volumeInfo;
   const isbn = info.industryIdentifiers?.find((id) => id.type === "ISBN_13");

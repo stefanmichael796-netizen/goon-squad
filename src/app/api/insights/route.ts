@@ -160,6 +160,38 @@ export async function GET(request: Request) {
   const currentYear = new Date().getFullYear();
   const lastYear = currentYear - 1;
 
+  // Backfill missing page counts from Google Books. Search results often omit
+  // pageCount, so older books can have null (counted as 0 pages). Fetch the full
+  // volume for those and cache it on the books row — one-time per book.
+  const missingPages = Array.from(
+    new Map(
+      books
+        .map((ub) => ub.book as any)
+        .filter((b) => b && b.google_books_id && (!b.page_count || b.page_count === 0))
+        .map((b) => [b.id, b])
+    ).values()
+  ).slice(0, 40);
+
+  if (missingPages.length > 0) {
+    const { getBookById } = await import("@/lib/google-books");
+    await Promise.all(
+      missingPages.map(async (b: any) => {
+        try {
+          const full = await getBookById(b.google_books_id);
+          const pc = full?.volumeInfo?.pageCount;
+          if (pc && pc > 0) {
+            await supabase.from("books").update({ page_count: pc }).eq("id", b.id);
+            books.forEach((ub) => {
+              if ((ub.book as any)?.id === b.id) (ub.book as any).page_count = pc;
+            });
+          }
+        } catch {
+          // best-effort; leave it as-is if the lookup fails
+        }
+      })
+    );
+  }
+
   // Books per month (current year and last year)
   const booksPerMonth: { month: string; current: number; previous: number }[] = [];
   for (let m = 0; m < 12; m++) {

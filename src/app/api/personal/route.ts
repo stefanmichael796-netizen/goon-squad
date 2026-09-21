@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { volumeToBook } from "@/lib/google-books";
+import { volumeToBook, hydrateVolume } from "@/lib/google-books";
 import { NextResponse } from "next/server";
 import type { GoogleBooksVolume } from "@/lib/types";
 
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       shelf: "reading" | "want" | "read";
     };
 
-    const bookData = volumeToBook(googleBooksVolume);
+    const bookData = volumeToBook(await hydrateVolume(googleBooksVolume));
 
     const { data: existingBook } = await supabase
       .from("books")

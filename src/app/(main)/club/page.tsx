@@ -415,7 +415,6 @@ export default function ClubPage() {
   }
 
   if (loading) return <PageSkeleton />;
-
   if (!club) {
     return (
       <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6 animate-fade-in">
@@ -520,6 +519,11 @@ export default function ClubPage() {
       </div>
     );
   }
+
+  const topRated = [...pastBooksWithRatings]
+    .filter((item) => item.avgRating !== null)
+    .sort((a, b) => (b.avgRating as number) - (a.avgRating as number))
+    .slice(0, 5);
 
   return (
     <div className="max-w-lg mx-auto w-full px-4 py-6 space-y-6">
@@ -761,6 +765,43 @@ export default function ClubPage() {
           >
             <BookOpen className="w-4 h-4" /> Pick a book
           </button>
+        </section>
+      )}
+
+      {/* Highest rated — top 5 by club average */}
+      {topRated.length > 0 && (
+        <section>
+          <h2 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-3">
+            Highest rated
+          </h2>
+          <div className="grid grid-cols-5 gap-2 stagger">
+            {topRated.map((item, i) => {
+              const book = item.clubBook.book as any;
+              return (
+                <button
+                  key={item.clubBook.id}
+                  onClick={() => setSelectedBook(item)}
+                  style={{ ["--i" as string]: i } as React.CSSProperties}
+                  className="group press"
+                >
+                  <div className="relative transition-transform duration-200 group-hover:-translate-y-1">
+                    <BookCover
+                      coverUrl={book?.cover_url}
+                      title={book?.title || ""}
+                      size="md"
+                      className="w-full h-auto aspect-[2/3]"
+                    />
+                    <span className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-[var(--accent)] text-white text-[10px] font-bold flex items-center justify-center book-shadow">
+                      {i + 1}
+                    </span>
+                    <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/70 text-white text-[11px] font-bold backdrop-blur-sm">
+                      {item.avgRating}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </section>
       )}
 

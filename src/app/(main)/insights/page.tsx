@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
-import { BarChart3 } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
+import { BarChart3, Loader2, RotateCw } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -60,6 +61,9 @@ export default function InsightsPage() {
   const [loading, setLoading] = useState(true);
   const [scope, setScope] = useState<"me" | "club">("me");
   const [tab, setTab] = useState<"stats" | "year">("stats");
+  const [backfilling, setBackfilling] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const toast = useToast();
 
   useEffect(() => {
     let active = true;
@@ -73,7 +77,41 @@ export default function InsightsPage() {
     }
     load();
     return () => { active = false; };
-  }, [scope]);
+  }, [scope, reloadKey]);
+
+  async function backfillAllPageCounts() {
+    setBackfilling(true);
+    let cursor: string | null = null;
+    let total = 0;
+    let hasMore = true;
+    let guard = 0;
+    try {
+      while (hasMore && guard < 500) {
+        guard++;
+        const res: Response = await fetch("/api/books/backfill-pages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cursor }),
+        });
+        if (!res.ok) {
+          toast("Couldn't update page counts — try again", "error");
+          break;
+        }
+        const d = await res.json();
+        total += d.updated;
+        cursor = d.nextCursor;
+        hasMore = d.hasMore;
+      }
+      toast(
+        total > 0 ? `Updated ${total} page count${total === 1 ? "" : "s"}` : "Page counts are already up to date",
+        "success"
+      );
+      setReloadKey((k) => k + 1);
+    } catch {
+      toast("Couldn't update page counts — try again", "error");
+    }
+    setBackfilling(false);
+  }
 
   const ScopeToggle = () => (
     <div className="inline-flex rounded-lg bg-[var(--surface)] border border-[var(--border)] p-0.5">
@@ -267,6 +305,22 @@ export default function InsightsPage() {
               </div>
             </section>
           )}
+
+          {/* Maintenance: fill in page counts across the whole library */}
+          <section className="pt-2 text-center">
+            <button
+              onClick={backfillAllPageCounts}
+              disabled={backfilling}
+              className="inline-flex items-center gap-2 text-xs text-[var(--muted)] hover:text-[var(--foreground)] transition-colors disabled:opacity-60"
+            >
+              {backfilling ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <RotateCw className="w-3.5 h-3.5" />
+              )}
+              {backfilling ? "Updating page counts…" : "Page counts look off? Refresh every book"}
+            </button>
+          </section>
         </div>
       )}
 

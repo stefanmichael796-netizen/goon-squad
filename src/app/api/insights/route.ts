@@ -69,20 +69,28 @@ export async function GET(request: Request) {
   // Fill in author nationality for any books that don't have it yet, using one
   // batched Claude call. Cached on the books row (author_countries), so this only
   // ever runs once per book — later loads skip straight past it.
-  const missingCountry = Array.from(
+  // Fill in author nationality AND a distinct genre for any books that are
+  // missing either, using one batched Claude call. Both are cached on the books
+  // row, so this only runs once per book — later loads skip straight past it.
+  const needsEnrich = Array.from(
     new Map(
       books
         .map((ub) => ub.book as any)
-        .filter((b) => b && b.title && (!b.author_countries || b.author_countries.length === 0))
+        .filter(
+          (b) =>
+            b &&
+            b.title &&
+            ((!b.author_countries || b.author_countries.length === 0) || !b.genre)
+        )
         .map((b) => [b.id, b])
     ).values()
   );
 
-  if (missingCountry.length > 0 && process.env.ANTHROPIC_API_KEY) {
+  if (needsEnrich.length > 0 && process.env.ANTHROPIC_API_KEY) {
     try {
       const Anthropic = (await import("@anthropic-ai/sdk")).default;
       const client = new Anthropic();
-      const batch = missingCountry.slice(0, 60);
+      const batch = needsEnrich.slice(0, 50);
       const list = batch
         .map(
           (b: any, i: number) =>
@@ -92,7 +100,7 @@ export async function GET(request: Request) {
 
       const message = await client.messages.create({
         model: "claude-opus-4-8",
-        max_tokens: 2000,
+        max_tokens: 3000,
         thinking: { type: "disabled" },
         output_config: {
           format: {
@@ -100,7 +108,7 @@ export async function GET(request: Request) {
             schema: {
               type: "object",
               properties: {
-                authors: {
+                books: {
                   type: "array",
                   description: "One entry per numbered book, in the same order as the list.",
                   items: {
@@ -112,13 +120,18 @@ export async function GET(request: Request) {
                         description:
                           "The primary author's nationality as a plain country name (e.g. 'United States', 'Ireland', 'Japan', 'Nigeria'). Use 'Unknown' only if you genuinely do not know the author.",
                       },
+                      genre: {
+                        type: "string",
+                        description:
+                          "The single best-fitting genre, chosen from exactly this list: Literary Fiction, Contemporary Fiction, Historical Fiction, Science Fiction, Fantasy, Mystery, Thriller, Horror, Romance, Young Adult, Classic, Short Stories, Poetry, Memoir, Biography, History, Science, Nature, Philosophy, Psychology, Self-Help, Business, Economics, Politics, True Crime, Travel, Essays, Religion, Art, Cookery, Graphic Novel, Children's, Drama. Pick the most specific one that genuinely fits; never answer just 'Fiction' or 'Nonfiction'. Use 'Other' only if nothing fits.",
+                      },
                     },
-                    required: ["index", "country"],
+                    required: ["index", "country", "genre"],
                     additionalProperties: false,
                   },
                 },
               },
-              required: ["authors"],
+              required: ["books"],
               additionalProperties: false,
             },
           },
@@ -126,34 +139,45 @@ export async function GET(request: Request) {
         system: [
           {
             type: "text",
-            text: "You identify the nationality (country of origin or citizenship) of book authors. Be accurate and concise; return a single country name per author. If you genuinely do not know, return 'Unknown' rather than guessing.",
+            text: "You are a knowledgeable librarian. For each book you identify the primary author's nationality (country of origin or citizenship) and assign the single most fitting genre from the provided list. Be accurate; if you truly don't know a nationality, use 'Unknown'. Always pick a specific genre rather than the generic 'Fiction'.",
             cache_control: { type: "ephemeral" },
           },
         ],
         messages: [
           {
             role: "user",
-            content: `For each book below, give the primary author's nationality as a country:\n\n${list}`,
+            content: `For each book below, give the primary author's nationality (as a country) and its single best-fitting genre:\n\n${list}`,
           },
         ],
       });
 
       const textBlock = message.content.find((b) => b.type === "text");
       const raw = textBlock && "text" in textBlock ? textBlock.text : "";
-      const parsed = JSON.parse(raw) as { authors: { index: number; country: string }[] };
+      const parsed = JSON.parse(raw) as { books: { index: number; country: string; genre: string }[] };
 
-      for (const entry of parsed.authors || []) {
+      for (const entry of parsed.books || []) {
         const b = batch[entry.index - 1] as any;
-        if (b && entry.country) {
+        if (!b) continue;
+        // Separate updates so a missing `genre` column (migration not yet run)
+        // can't stop the nationality write, and vice versa.
+        if (entry.country) {
           const countries = [entry.country];
           await supabase.from("books").update({ author_countries: countries }).eq("id", b.id);
           books.forEach((ub) => {
             if ((ub.book as any)?.id === b.id) (ub.book as any).author_countries = countries;
           });
         }
+        if (entry.genre) {
+          const { error: gErr } = await supabase.from("books").update({ genre: entry.genre }).eq("id", b.id);
+          if (!gErr) {
+            books.forEach((ub) => {
+              if ((ub.book as any)?.id === b.id) (ub.book as any).genre = entry.genre;
+            });
+          }
+        }
       }
     } catch {
-      // best-effort — if the lookup fails, those books just stay "Unknown"
+      // best-effort — if the lookup fails, those books just keep what they have
     }
   }
 
@@ -251,18 +275,22 @@ export async function GET(request: Request) {
     .map(([country, count]) => ({ country, count }))
     .sort((a, b) => b.count - a.count);
 
-  // Genres / categories
+  // Genres — prefer the distinct AI genre; fall back to a book's first Google
+  // Books category for anything not yet enriched.
   const categoryCounts: Record<string, number> = {};
   books.forEach((ub) => {
     const book = ub.book as any;
-    book?.categories?.forEach((c: string) => {
+    if (book?.genre) {
+      categoryCounts[book.genre] = (categoryCounts[book.genre] || 0) + 1;
+    } else if (book?.categories?.length) {
+      const c = book.categories[0];
       categoryCounts[c] = (categoryCounts[c] || 0) + 1;
-    });
+    }
   });
   const genres = Object.entries(categoryCounts)
     .map(([genre, count]) => ({ genre, count }))
     .sort((a, b) => b.count - a.count)
-    .slice(0, 10);
+    .slice(0, 12);
 
   // Reading pace
   const finishedDates = books

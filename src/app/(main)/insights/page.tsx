@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
+import { countryFlag } from "@/lib/flags";
 import { BarChart3, Loader2, RotateCw } from "lucide-react";
 import {
   BarChart,
@@ -281,7 +282,10 @@ export default function InsightsPage() {
               <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] divide-y divide-[var(--border)]">
                 {data.authorCountries.map((ac) => (
                   <div key={ac.country} className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-sm text-[var(--foreground)]">{ac.country}</span>
+                    <span className="text-sm text-[var(--foreground)] flex items-center gap-2">
+                      <span className="text-base leading-none">{countryFlag(ac.country) || "🏳️"}</span>
+                      {ac.country}
+                    </span>
                     <span className="text-sm text-[var(--muted)]">{ac.count}</span>
                   </div>
                 ))}
@@ -400,8 +404,9 @@ export default function InsightsPage() {
                     {data.yearInReview.authorCountries.map((ac) => (
                       <span
                         key={ac.country}
-                        className="text-sm px-2.5 py-0.5 rounded-full bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)]"
+                        className="text-sm px-2.5 py-0.5 rounded-full bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] flex items-center gap-1.5"
                       >
+                        <span className="text-base leading-none">{countryFlag(ac.country) || "🏳️"}</span>
                         {ac.country}
                       </span>
                     ))}

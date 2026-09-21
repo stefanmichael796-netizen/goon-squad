@@ -50,3 +50,6 @@ create policy "Authenticated users can update books"
   to authenticated
   using (true)
   with check (true);
+
+-- 00013: distinct AI-generated genre per book
+alter table books add column if not exists genre text;

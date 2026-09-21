@@ -289,14 +289,21 @@ export default function PersonalPage() {
   async function moveFavourite(index: number, direction: -1 | 1) {
     const targetIndex = index + direction;
     if (targetIndex < 0 || targetIndex >= favourites.length) return;
-    const a = favourites[index];
-    const b = favourites[targetIndex];
-    const aRank = a.favourite_rank;
-    const bRank = b.favourite_rank;
-    await Promise.all([
-      supabase.from("user_books").update({ favourite_rank: bRank }).eq("id", a.id),
-      supabase.from("user_books").update({ favourite_rank: aRank }).eq("id", b.id),
-    ]);
+
+    // Reorder the list, then renumber every favourite 1..n. This is robust even
+    // when existing favourite_rank values are missing or duplicated (older data),
+    // where a simple two-row swap would be a no-op.
+    const reordered = [...favourites];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(targetIndex, 0, moved);
+
+    setFavourites(reordered); // optimistic — arrows feel instant
+
+    await Promise.all(
+      reordered.map((ub, i) =>
+        supabase.from("user_books").update({ favourite_rank: i + 1 }).eq("id", ub.id)
+      )
+    );
     loadData();
   }
 
@@ -428,9 +435,6 @@ export default function PersonalPage() {
             );
           })}
         </div>
-        <p className="text-[10px] text-[var(--muted)] italic mt-1.5">
-          Star a book to add it to your Top 5. Use arrows to reorder.
-        </p>
       </section>
 
       {/* Inline pick-book search */}

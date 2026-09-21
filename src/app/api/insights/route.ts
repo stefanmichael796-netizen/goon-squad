@@ -174,11 +174,20 @@ export async function GET(request: Request) {
 
   if (missingPages.length > 0) {
     const { getBookById } = await import("@/lib/google-books");
+    const { pageCountFromOpenLibrary } = await import("@/lib/open-library");
     await Promise.all(
       missingPages.map(async (b: any) => {
         try {
-          const full = await getBookById(b.google_books_id);
-          const pc = full?.volumeInfo?.pageCount;
+          // Open Library first (exact by ISBN), then Google Books as a fallback.
+          let pc = await pageCountFromOpenLibrary({
+            isbn13: b.isbn_13,
+            title: b.title,
+            authors: b.authors,
+          });
+          if (!pc) {
+            const full = await getBookById(b.google_books_id);
+            pc = full?.volumeInfo?.pageCount ?? null;
+          }
           if (pc && pc > 0) {
             await supabase.from("books").update({ page_count: pc }).eq("id", b.id);
             books.forEach((ub) => {

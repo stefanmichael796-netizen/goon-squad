@@ -1,4 +1,5 @@
 import type { GoogleBooksVolume, Book } from "./types";
+import { pageCountFromOpenLibrary } from "./open-library";
 
 const API_BASE = "https://www.googleapis.com/books/v1/volumes";
 
@@ -48,18 +49,35 @@ export async function getBookById(
 }
 
 // Search results frequently omit pageCount (and sometimes description/categories).
-// If the picked volume has no pageCount, fetch the full record so the stored book
-// gets an accurate page count. Falls back to the original volume on any failure.
+// If the picked volume has no pageCount, try the full Google Books record, then
+// Open Library (by ISBN, then title), so the stored book gets an accurate count.
 export async function hydrateVolume(
   volume: GoogleBooksVolume
 ): Promise<GoogleBooksVolume> {
-  if (volume.volumeInfo?.pageCount) return volume;
-  try {
-    const full = await getBookById(volume.id);
-    return full || volume;
-  } catch {
-    return volume;
+  let v = volume;
+
+  if (!v.volumeInfo?.pageCount) {
+    try {
+      const full = await getBookById(v.id);
+      if (full) v = full;
+    } catch {
+      // keep original
+    }
   }
+
+  if (!v.volumeInfo?.pageCount) {
+    const isbn = v.volumeInfo?.industryIdentifiers?.find((id) => id.type === "ISBN_13")?.identifier;
+    const pc = await pageCountFromOpenLibrary({
+      isbn13: isbn,
+      title: v.volumeInfo?.title,
+      authors: v.volumeInfo?.authors,
+    });
+    if (pc) {
+      v = { ...v, volumeInfo: { ...v.volumeInfo, pageCount: pc } };
+    }
+  }
+
+  return v;
 }
 
 export function volumeToBook(volume: GoogleBooksVolume): Omit<Book, "id" | "created_at"> {

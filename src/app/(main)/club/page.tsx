@@ -864,7 +864,7 @@ export default function ClubPage() {
             })}
           </div>
         ) : (
-          <EmptyState message="No books on the shelf yet. Add one you've read." icon={BookOpen} withQuote />
+          <EmptyState message="No books on the shelf yet. Add one you've read." icon={BookOpen} />
         )}
       </section>
 

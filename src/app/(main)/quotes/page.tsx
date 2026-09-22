@@ -68,7 +68,6 @@ export default function QuotesPage() {
               : "No quotes yet. Save a line you love from any book."
           }
           icon={QuoteIcon}
-          withQuote
         />
       ) : (
         <div className="space-y-3 stagger">

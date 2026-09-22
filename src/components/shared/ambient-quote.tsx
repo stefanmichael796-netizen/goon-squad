@@ -31,7 +31,7 @@ export function AmbientQuote({ scope = "me", greeting, curatedOnly, className }:
     let active = true;
     (async () => {
       try {
-        const res = await fetch(`/api/quotes/list?scope=${scope}`);
+        const res = await fetch(`/api/quotes/ambient?scope=${scope}`);
         if (!res.ok) return;
         const data = await res.json();
         const quotes: DisplayQuote[] = (data.quotes || []).map((q: any) => ({
@@ -40,7 +40,7 @@ export function AmbientQuote({ scope = "me", greeting, curatedOnly, className }:
           author: q.author,
           person: q.person,
         }));
-        if (active && quotes.length) {
+        if (active) {
           setPool(quotes);
           cacheQuotes(scope, quotes);
         }
@@ -49,7 +49,9 @@ export function AmbientQuote({ scope = "me", greeting, curatedOnly, className }:
     return () => { active = false; };
   }, [scope, curatedOnly]);
 
-  const quotes = pool.length ? pool : CURATED_QUOTES;
+  // Login (curatedOnly) uses classics; in-app surfaces show only the reader's
+  // own quotes — nothing rather than a generic book they haven't read.
+  const quotes = curatedOnly ? CURATED_QUOTES : pool;
 
   // Start on a random quote, then rotate slowly.
   useEffect(() => {

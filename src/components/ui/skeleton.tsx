@@ -2,21 +2,20 @@
 
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { CURATED_QUOTES, readCachedQuotes, pickRandom, type DisplayQuote } from "@/lib/quotes";
+import { readCachedQuotes, pickRandom, type DisplayQuote } from "@/lib/quotes";
 
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn("skeleton rounded-md", className)} />;
 }
 
-// A saved (or curated) quote shown while the page loads — turns the wait into a
-// small moment rather than a blank shimmer.
+// A quote from the reader's own books shown while the page loads. Uses only
+// cached personal/club quotes — if there are none yet, it simply shows nothing.
 function LoadingQuote() {
   const [q, setQ] = useState<DisplayQuote | null>(null);
 
   useEffect(() => {
     const cached = [...readCachedQuotes("me"), ...readCachedQuotes("club")];
-    const pool = cached.length ? cached : CURATED_QUOTES;
-    setQ(pickRandom(pool) || null);
+    if (cached.length) setQ(pickRandom(cached) || null);
   }, []);
 
   if (!q) return null;

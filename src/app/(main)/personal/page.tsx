@@ -677,7 +677,7 @@ export default function PersonalPage() {
             })}
           </div>
         ) : (
-          <EmptyState message="Your shelf is waiting. Add a book you've read." icon={BookOpen} withQuote />
+          <EmptyState message="Your shelf is waiting. Add a book you've read." icon={BookOpen} />
         )}
       </section>
 

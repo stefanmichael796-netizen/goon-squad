@@ -9,7 +9,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const scope = new URL(request.url).searchParams.get("scope") === "club" ? "club" : "me";
+  const sp = new URL(request.url).searchParams;
+  const scope = sp.get("scope") === "club" ? "club" : "me";
+  const yearParam = sp.get("year");
 
   // Build a common `books` shape ({ finished_at, book_id, book }) for whichever
   // scope we're in, so all the aggregation below is identical.
@@ -18,6 +20,7 @@ export async function GET(request: Request) {
 
   const emptyResponse = {
     scope,
+    availableYears: [new Date().getFullYear()],
     booksPerMonth: [],
     topAuthors: [],
     authorCountries: [],
@@ -25,8 +28,8 @@ export async function GET(request: Request) {
     members: [],
     readingPace: { totalBooks: 0, monthsSinceFirst: 0, booksPerMonth: 0, totalPages: 0, pagesPerMonth: 0 },
     yearInReview: {
-      totalBooks: 0, totalPages: 0, longestBook: null, shortestBook: null,
-      mostReadAuthor: null, topRatedBook: null, pulledQuote: null, authorCountries: [],
+      year: new Date().getFullYear(), totalBooks: 0, totalPages: 0, longestBook: null,
+      shortestBook: null, topRatedBook: null, pulledQuote: null, authorCountries: [], books: [],
     },
   };
 
@@ -183,6 +186,7 @@ export async function GET(request: Request) {
 
   const currentYear = new Date().getFullYear();
   const lastYear = currentYear - 1;
+  const selectedYear = yearParam && /^\d{4}$/.test(yearParam) ? parseInt(yearParam, 10) : currentYear;
 
   // Backfill missing page counts from Google Books. Search results often omit
   // pageCount, so older books can have null (counted as 0 pages). Fetch the full
@@ -310,10 +314,10 @@ export async function GET(request: Request) {
     pagesPerMonth: monthsSinceFirst ? Math.round(totalPages / monthsSinceFirst) : 0,
   };
 
-  // Year in review
+  // Year in review — for the selected year (defaults to the current year)
   const yearBooks = books.filter((b) => {
     if (!b.finished_at) return false;
-    return new Date(b.finished_at).getFullYear() === currentYear;
+    return new Date(b.finished_at).getFullYear() === selectedYear;
   });
 
   const yearPages = yearBooks.reduce((sum, ub) => sum + ((ub.book as any)?.page_count || 0), 0);
@@ -330,43 +334,28 @@ export async function GET(request: Request) {
     yearBooks[0] || null
   );
 
-  const yearAuthorCounts: Record<string, number> = {};
-  yearBooks.forEach((ub) => {
-    (ub.book as any)?.authors?.forEach((a: string) => {
-      yearAuthorCounts[a] = (yearAuthorCounts[a] || 0) + 1;
-    });
-  });
-  const mostReadAuthor = Object.entries(yearAuthorCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
-
-  // Top-rated + a pulled quote + (club) member leaderboard — scope-aware.
-  let topRatedBook: { title: string; rating: number } | null = null;
+  // Rating per book — the club average, or the user's own rating.
+  const ratingByBook: Record<string, number> = {};
   let pulledQuote: { body: string; bookTitle: string } | null = null;
   let members: { name: string; booksRated: number }[] = [];
 
   if (scope === "club" && clubId) {
     const { data: clubLogs } = await supabase
       .from("logs")
-      .select("book_id, rating, user_id, book:books(title)")
+      .select("book_id, rating, user_id")
       .eq("club_id", clubId)
       .in("kind", ["review", "reread"])
       .not("rating", "is", null);
 
-    // Average rating per book, then pick the best among this year's books.
-    const agg: Record<string, { sum: number; n: number; title: string }> = {};
+    const agg: Record<string, { sum: number; n: number }> = {};
     (clubLogs || []).forEach((l: any) => {
-      const cur = agg[l.book_id] || { sum: 0, n: 0, title: (l.book as any)?.title };
+      const cur = agg[l.book_id] || { sum: 0, n: 0 };
       cur.sum += l.rating;
       cur.n += 1;
       agg[l.book_id] = cur;
     });
-    yearBooks.forEach((yb) => {
-      const a = agg[yb.book_id];
-      if (a) {
-        const avg = Math.round((a.sum / a.n) * 10) / 10;
-        if (!topRatedBook || avg > topRatedBook.rating) {
-          topRatedBook = { title: a.title || (yb.book as any)?.title, rating: avg };
-        }
-      }
+    Object.entries(agg).forEach(([id, a]) => {
+      ratingByBook[id] = Math.round((a.sum / a.n) * 10) / 10;
     });
 
     // Member leaderboard: how many distinct books each member has rated.
@@ -395,19 +384,16 @@ export async function GET(request: Request) {
       ? { body: clubQuotes[0].body, bookTitle: (clubQuotes[0].book as any)?.title }
       : null;
   } else {
-    const { data: yearLogs } = await supabase
+    const { data: myLogs } = await supabase
       .from("logs")
-      .select("*, book:books(*)")
+      .select("book_id, rating, created_at")
       .eq("user_id", user.id)
-      .eq("kind", "review")
+      .in("kind", ["review", "reread"])
       .not("rating", "is", null)
-      .order("rating", { ascending: false })
-      .limit(50);
-
-    const topRatedLog = (yearLogs || []).find((l) => yearBooks.some((yb) => yb.book_id === l.book_id));
-    topRatedBook = topRatedLog
-      ? { title: (topRatedLog.book as any)?.title, rating: topRatedLog.rating }
-      : null;
+      .order("created_at", { ascending: false });
+    (myLogs || []).forEach((l: any) => {
+      if (ratingByBook[l.book_id] === undefined) ratingByBook[l.book_id] = l.rating; // latest per book
+    });
 
     const { data: userQuotes } = await supabase
       .from("quotes")
@@ -420,19 +406,60 @@ export async function GET(request: Request) {
       : null;
   }
 
+  // Top-rated book of the year (by the rating above).
+  let topRatedBook: { title: string; rating: number } | null = null;
+  yearBooks.forEach((yb) => {
+    const r = ratingByBook[yb.book_id];
+    if (r != null && (!topRatedBook || r > topRatedBook.rating)) {
+      topRatedBook = { title: (yb.book as any)?.title, rating: r };
+    }
+  });
+
+  // Every book from the selected year, with its rating, best first.
+  const yearBooksList = yearBooks
+    .map((yb) => ({
+      bookId: yb.book_id,
+      title: (yb.book as any)?.title || "",
+      coverUrl: (yb.book as any)?.cover_url || null,
+      rating: ratingByBook[yb.book_id] ?? null,
+    }))
+    .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1));
+
+  // Countries represented in the selected year.
+  const yearCountryCounts: Record<string, number> = {};
+  yearBooks.forEach((ub) => {
+    (ub.book as any)?.author_countries?.forEach((c: string) => {
+      if (c && c !== "Unknown") yearCountryCounts[c] = (yearCountryCounts[c] || 0) + 1;
+    });
+  });
+  const yearCountries = Object.entries(yearCountryCounts)
+    .map(([country, count]) => ({ country, count }))
+    .sort((a, b) => b.count - a.count);
+
+  // Years that have finished books (plus the current year), newest first.
+  const availableYears = Array.from(
+    new Set(
+      books.filter((b) => b.finished_at).map((b) => new Date(b.finished_at!).getFullYear())
+    )
+  );
+  if (!availableYears.includes(currentYear)) availableYears.push(currentYear);
+  availableYears.sort((a, b) => b - a);
+
   const yearInReview = {
+    year: selectedYear,
     totalBooks: yearBooks.length,
     totalPages: yearPages,
     longestBook: longestBook ? { title: (longestBook.book as any)?.title, pages: (longestBook.book as any)?.page_count } : null,
     shortestBook: shortestBook ? { title: (shortestBook.book as any)?.title, pages: (shortestBook.book as any)?.page_count } : null,
-    mostReadAuthor,
     topRatedBook,
     pulledQuote,
-    authorCountries: authorCountries.filter((ac) => ac.country !== "Unknown"),
+    authorCountries: yearCountries,
+    books: yearBooksList,
   };
 
   return NextResponse.json({
     scope,
+    availableYears,
     booksPerMonth,
     topAuthors,
     authorCountries,

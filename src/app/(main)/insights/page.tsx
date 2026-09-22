@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { BookCover } from "@/components/ui/book-cover";
 import { useToast } from "@/components/ui/toast";
 import { countryFlag } from "@/lib/flags";
 import { BarChart3, Loader2, RotateCw } from "lucide-react";
@@ -18,6 +19,7 @@ import {
 
 interface InsightsData {
   scope: "me" | "club";
+  availableYears: number[];
   booksPerMonth: { month: string; current: number; previous: number }[];
   topAuthors: { name: string; count: number; covers: string[] }[];
   authorCountries: { country: string; count: number }[];
@@ -31,14 +33,15 @@ interface InsightsData {
     pagesPerMonth: number;
   };
   yearInReview: {
+    year: number;
     totalBooks: number;
     totalPages: number;
     longestBook: { title: string; pages: number } | null;
     shortestBook: { title: string; pages: number } | null;
-    mostReadAuthor: string | null;
     topRatedBook: { title: string; rating: number } | null;
     pulledQuote: { body: string; bookTitle: string } | null;
     authorCountries: { country: string; count: number }[];
+    books: { bookId: string; title: string; coverUrl: string | null; rating: number | null }[];
   };
 }
 
@@ -62,6 +65,7 @@ export default function InsightsPage() {
   const [loading, setLoading] = useState(true);
   const [scope, setScope] = useState<"me" | "club">("me");
   const [tab, setTab] = useState<"stats" | "year">("stats");
+  const [year, setYear] = useState(new Date().getFullYear());
   const [backfilling, setBackfilling] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const toast = useToast();
@@ -70,7 +74,7 @@ export default function InsightsPage() {
     let active = true;
     setLoading(true);
     async function load() {
-      const res = await fetch(`/api/insights?scope=${scope}`);
+      const res = await fetch(`/api/insights?scope=${scope}&year=${year}`);
       if (active && res.ok) {
         setData(await res.json());
       }
@@ -78,7 +82,7 @@ export default function InsightsPage() {
     }
     load();
     return () => { active = false; };
-  }, [scope, reloadKey]);
+  }, [scope, year, reloadKey]);
 
   async function backfillAllPageCounts() {
     setBackfilling(true);
@@ -330,18 +334,68 @@ export default function InsightsPage() {
 
       {tab === "year" && (
         <div className="space-y-4">
-          <h2 className="font-serif font-bold text-2xl text-[var(--foreground)] text-center">
-            {new Date().getFullYear()} in Review
-          </h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-serif font-bold text-2xl text-[var(--foreground)]">
+              {data.yearInReview.year} in Review
+            </h2>
+            {data.availableYears.length > 1 && (
+              <select
+                value={year}
+                onChange={(e) => setYear(parseInt(e.target.value, 10))}
+                className="px-3 py-1.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-sm font-medium text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-coral/30"
+              >
+                {data.availableYears.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            )}
+          </div>
 
           {data.yearInReview.totalBooks === 0 ? (
-            <EmptyState message="No books finished this year yet." icon={BarChart3} />
+            <EmptyState message={`No books finished in ${data.yearInReview.year}.`} icon={BarChart3} />
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <StatTile value={data.yearInReview.totalBooks} label="books read" />
                 <StatTile value={data.yearInReview.totalPages.toLocaleString()} label="pages turned" />
               </div>
+
+              {/* Every book from the year, with its rating */}
+              <section>
+                <SectionLabel>{scope === "club" ? "The club read" : "Books you read"}</SectionLabel>
+                <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] divide-y divide-[var(--border)]">
+                  {data.yearInReview.books.map((b) => (
+                    <div key={b.bookId} className="flex items-center gap-3 px-3 py-2.5">
+                      <BookCover coverUrl={b.coverUrl} title={b.title} size="sm" />
+                      <p className="flex-1 text-sm font-medium text-[var(--foreground)] leading-tight">
+                        {b.title}
+                      </p>
+                      {b.rating != null ? (
+                        <span className="text-base font-bold text-[var(--foreground)]">{b.rating}</span>
+                      ) : (
+                        <span className="text-xs text-[var(--muted)]">—</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {scope === "club" && (
+                  <p className="text-[10px] text-[var(--muted)] mt-1.5">Scores are the club average.</p>
+                )}
+              </section>
+
+              {data.yearInReview.topRatedBook && (
+                <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
+                  <p className="text-xs text-[var(--muted)] uppercase tracking-wider mb-1">Top rated</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-serif font-medium text-[var(--foreground)] flex-1">
+                      {data.yearInReview.topRatedBook.title}
+                    </p>
+                    <span className="text-2xl font-bold text-[var(--accent)] flex-shrink-0">
+                      {data.yearInReview.topRatedBook.rating}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {data.yearInReview.longestBook && (
                 <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
@@ -360,28 +414,6 @@ export default function InsightsPage() {
                     {data.yearInReview.shortestBook.title}
                   </p>
                   <p className="text-sm text-[var(--muted)]">{data.yearInReview.shortestBook.pages} pages</p>
-                </div>
-              )}
-
-              {data.yearInReview.mostReadAuthor && (
-                <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
-                  <p className="text-xs text-[var(--muted)] uppercase tracking-wider mb-1">Most-read author</p>
-                  <p className="font-serif font-medium text-[var(--foreground)]">
-                    {data.yearInReview.mostReadAuthor}
-                  </p>
-                </div>
-              )}
-
-              {data.yearInReview.topRatedBook && (
-                <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
-                  <p className="text-xs text-[var(--muted)] uppercase tracking-wider mb-1">Top rated</p>
-                  <p className="font-serif font-medium text-[var(--foreground)]">
-                    {data.yearInReview.topRatedBook.title}
-                  </p>
-                  <p className="text-sm text-ochre">
-                    {"★".repeat(Math.floor(data.yearInReview.topRatedBook.rating))}
-                    {data.yearInReview.topRatedBook.rating % 1 >= 0.5 ? "½" : ""}
-                  </p>
                 </div>
               )}
 

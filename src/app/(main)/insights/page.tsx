@@ -20,17 +20,14 @@ import {
 interface InsightsData {
   scope: "me" | "club";
   availableYears: number[];
-  booksPerMonth: { month: string; current: number; previous: number }[];
+  booksPerYear: { year: number; count: number }[];
   topAuthors: { name: string; count: number; covers: string[] }[];
   authorCountries: { country: string; count: number }[];
   genres: { genre: string; count: number }[];
   members: { name: string; booksRated: number }[];
   readingPace: {
     totalBooks: number;
-    monthsSinceFirst: number;
-    booksPerMonth: number;
     totalPages: number;
-    pagesPerMonth: number;
   };
   yearInReview: {
     year: number;
@@ -41,7 +38,7 @@ interface InsightsData {
     topRatedBook: { title: string; rating: number } | null;
     pulledQuote: { body: string; bookTitle: string } | null;
     authorCountries: { country: string; count: number }[];
-    books: { bookId: string; title: string; coverUrl: string | null; rating: number | null }[];
+    books: { bookId: string; title: string; coverUrl: string | null; rating: number | null; reread: boolean }[];
   };
 }
 
@@ -197,67 +194,68 @@ export default function InsightsPage() {
             <SectionLabel>Reading pace</SectionLabel>
             <div className="grid grid-cols-2 gap-3">
               <StatTile value={data.readingPace.totalBooks} label="books read" />
-              <StatTile value={data.readingPace.booksPerMonth} label="books / month" />
               <StatTile value={data.readingPace.totalPages.toLocaleString()} label="total pages" />
-              <StatTile value={data.readingPace.pagesPerMonth.toLocaleString()} label="pages / month" />
             </div>
           </section>
 
-          {/* Books per month chart */}
-          <section>
-            <SectionLabel>Books per month</SectionLabel>
-            <div className="h-48 w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-3">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.booksPerMonth} barGap={2}>
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fill: "var(--muted)", fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{ fill: "var(--muted)", fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={20}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "var(--border)", opacity: 0.3 }}
-                    contentStyle={{
-                      backgroundColor: "var(--surface)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "8px",
-                      color: "var(--foreground)",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Bar dataKey="previous" fill="var(--border)" radius={[3, 3, 0, 0]} name="Last year" />
-                  <Bar dataKey="current" radius={[3, 3, 0, 0]} name="This year">
-                    {data.booksPerMonth.map((_, i) => (
-                      <Cell key={i} fill="var(--accent)" />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
+          {/* Books per year chart */}
+          {data.booksPerYear.length > 0 && (
+            <section>
+              <SectionLabel>Books per year</SectionLabel>
+              <div className="h-48 w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-3">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.booksPerYear}>
+                    <XAxis
+                      dataKey="year"
+                      tick={{ fill: "var(--muted)", fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fill: "var(--muted)", fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={20}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "var(--border)", opacity: 0.3 }}
+                      contentStyle={{
+                        backgroundColor: "var(--surface)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        color: "var(--foreground)",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Bar dataKey="count" radius={[3, 3, 0, 0]} name="Books">
+                      {data.booksPerYear.map((_, i) => (
+                        <Cell key={i} fill="var(--accent)" />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+          )}
 
-          {/* Top authors */}
-          <section>
-            <SectionLabel>Top authors</SectionLabel>
-            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] divide-y divide-[var(--border)]">
-              {data.topAuthors.map((author, i) => (
-                <div key={author.name} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className="text-sm font-bold text-[var(--muted)] w-5 text-right">{i + 1}</span>
-                  <p className="flex-1 text-sm font-medium text-[var(--foreground)] truncate">{author.name}</p>
-                  <span className="text-xs text-[var(--muted)]">
-                    {author.count} {author.count === 1 ? "book" : "books"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
+          {/* Top authors — personal only */}
+          {data.scope !== "club" && data.topAuthors.length > 0 && (
+            <section>
+              <SectionLabel>Top authors</SectionLabel>
+              <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] divide-y divide-[var(--border)]">
+                {data.topAuthors.map((author, i) => (
+                  <div key={author.name} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className="text-sm font-bold text-[var(--muted)] w-5 text-right">{i + 1}</span>
+                    <p className="flex-1 text-sm font-medium text-[var(--foreground)] truncate">{author.name}</p>
+                    <span className="text-xs text-[var(--muted)]">
+                      {author.count} {author.count === 1 ? "book" : "books"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Squad leaderboard (club scope) */}
           {data.scope === "club" && data.members.some((m) => m.booksRated > 0) && (
@@ -364,12 +362,19 @@ export default function InsightsPage() {
               <section>
                 <SectionLabel>{scope === "club" ? "The club read" : "Books you read"}</SectionLabel>
                 <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] divide-y divide-[var(--border)]">
-                  {data.yearInReview.books.map((b) => (
-                    <div key={b.bookId} className="flex items-center gap-3 px-3 py-2.5">
+                  {data.yearInReview.books.map((b, i) => (
+                    <div key={b.bookId + i} className="flex items-center gap-3 px-3 py-2.5">
                       <BookCover coverUrl={b.coverUrl} title={b.title} size="sm" />
-                      <p className="flex-1 text-sm font-medium text-[var(--foreground)] leading-tight">
-                        {b.title}
-                      </p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-[var(--foreground)] leading-tight">
+                          {b.title}
+                        </p>
+                        {b.reread && (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-[var(--muted)] mt-0.5">
+                            <RotateCw className="w-2.5 h-2.5" /> reread
+                          </span>
+                        )}
+                      </div>
                       {b.rating != null ? (
                         <span className="text-base font-bold text-[var(--foreground)]">{b.rating}</span>
                       ) : (

@@ -21,12 +21,12 @@ export async function GET(request: Request) {
   const emptyResponse = {
     scope,
     availableYears: [new Date().getFullYear()],
-    booksPerMonth: [],
+    booksPerYear: [],
     topAuthors: [],
     authorCountries: [],
     genres: [],
     members: [],
-    readingPace: { totalBooks: 0, monthsSinceFirst: 0, booksPerMonth: 0, totalPages: 0, pagesPerMonth: 0 },
+    readingPace: { totalBooks: 0, totalPages: 0 },
     yearInReview: {
       year: new Date().getFullYear(), totalBooks: 0, totalPages: 0, longestBook: null,
       shortestBook: null, topRatedBook: null, pulledQuote: null, authorCountries: [], books: [],
@@ -185,7 +185,6 @@ export async function GET(request: Request) {
   }
 
   const currentYear = new Date().getFullYear();
-  const lastYear = currentYear - 1;
   const selectedYear = yearParam && /^\d{4}$/.test(yearParam) ? parseInt(yearParam, 10) : currentYear;
 
   // Backfill missing page counts from Google Books. Search results often omit
@@ -229,22 +228,36 @@ export async function GET(request: Request) {
     );
   }
 
-  // Books per month (current year and last year)
-  const booksPerMonth: { month: string; current: number; previous: number }[] = [];
-  for (let m = 0; m < 12; m++) {
-    const monthName = new Date(currentYear, m).toLocaleString("en-US", { month: "short" });
-    const current = books.filter((b) => {
-      if (!b.finished_at) return false;
-      const d = new Date(b.finished_at);
-      return d.getFullYear() === currentYear && d.getMonth() === m;
-    }).length;
-    const previous = books.filter((b) => {
-      if (!b.finished_at) return false;
-      const d = new Date(b.finished_at);
-      return d.getFullYear() === lastYear && d.getMonth() === m;
-    }).length;
-    booksPerMonth.push({ month: monthName, current, previous });
+  // Personal re-reads count as reads in the year they happened (club has none).
+  // Pull them once — used by the per-year graph and the year review.
+  let rereadLogs: any[] = [];
+  if (scope === "me") {
+    const { data } = await supabase
+      .from("logs")
+      .select("book_id, created_at, rating, book:books(*)")
+      .eq("user_id", user.id)
+      .eq("kind", "reread")
+      .order("created_at", { ascending: false });
+    rereadLogs = data || [];
   }
+
+  // Books per year (reads finished that year + personal re-reads that year)
+  const yearCounts: Record<number, number> = {};
+  books.forEach((b) => {
+    if (b.finished_at) {
+      const y = new Date(b.finished_at).getFullYear();
+      yearCounts[y] = (yearCounts[y] || 0) + 1;
+    }
+  });
+  rereadLogs.forEach((r) => {
+    if (r.created_at) {
+      const y = new Date(r.created_at).getFullYear();
+      yearCounts[y] = (yearCounts[y] || 0) + 1;
+    }
+  });
+  const booksPerYear = Object.entries(yearCounts)
+    .map(([y, count]) => ({ year: parseInt(y, 10), count }))
+    .sort((a, b) => a.year - b.year);
 
   // Top authors
   const authorCounts: Record<string, { count: number; covers: string[] }> = {};
@@ -297,21 +310,10 @@ export async function GET(request: Request) {
     .slice(0, 12);
 
   // Reading pace
-  const finishedDates = books
-    .filter((b) => b.finished_at)
-    .map((b) => new Date(b.finished_at!).getTime());
-  const firstFinished = finishedDates.length ? Math.min(...finishedDates) : null;
-  const monthsSinceFirst = firstFinished
-    ? Math.max(1, Math.ceil((Date.now() - firstFinished) / (30 * 24 * 60 * 60 * 1000)))
-    : 0;
   const totalPages = books.reduce((sum, ub) => sum + ((ub.book as any)?.page_count || 0), 0);
-
   const readingPace = {
     totalBooks: books.length,
-    monthsSinceFirst,
-    booksPerMonth: monthsSinceFirst ? +(books.length / monthsSinceFirst).toFixed(1) : 0,
     totalPages,
-    pagesPerMonth: monthsSinceFirst ? Math.round(totalPages / monthsSinceFirst) : 0,
   };
 
   // Year in review — for the selected year (defaults to the current year)
@@ -319,20 +321,6 @@ export async function GET(request: Request) {
     if (!b.finished_at) return false;
     return new Date(b.finished_at).getFullYear() === selectedYear;
   });
-
-  const yearPages = yearBooks.reduce((sum, ub) => sum + ((ub.book as any)?.page_count || 0), 0);
-  const longestBook = yearBooks.reduce(
-    (max, ub) => ((ub.book as any)?.page_count || 0) > ((max?.book as any)?.page_count || 0) ? ub : max,
-    yearBooks[0] || null
-  );
-  const shortestBook = yearBooks.reduce(
-    (min, ub) => {
-      const pc = (ub.book as any)?.page_count;
-      const minPc = (min?.book as any)?.page_count;
-      return pc && (!minPc || pc < minPc) ? ub : min;
-    },
-    yearBooks[0] || null
-  );
 
   // Rating per book — the club average, or the user's own rating.
   const ratingByBook: Record<string, number> = {};
@@ -406,29 +394,65 @@ export async function GET(request: Request) {
       : null;
   }
 
-  // Top-rated book of the year (by the rating above).
+  // Year entries = books finished in the year, plus (personal) re-reads that
+  // happened in the year. Each re-read counts as a read of that book that year.
+  type YearEntry = { book_id: string; book: any; rating: number | null; reread: boolean };
+  const yearEntries: YearEntry[] = yearBooks.map((yb) => ({
+    book_id: yb.book_id,
+    book: yb.book,
+    rating: ratingByBook[yb.book_id] ?? null,
+    reread: false,
+  }));
+  if (scope === "me") {
+    rereadLogs
+      .filter((r) => r.created_at && new Date(r.created_at).getFullYear() === selectedYear)
+      .forEach((r) => {
+        yearEntries.push({
+          book_id: r.book_id,
+          book: r.book,
+          rating: r.rating ?? ratingByBook[r.book_id] ?? null,
+          reread: true,
+        });
+      });
+  }
+
+  const yearPages = yearEntries.reduce((sum, e) => sum + (e.book?.page_count || 0), 0);
+  const longestBook = yearEntries.reduce<YearEntry | null>(
+    (max, e) => ((e.book?.page_count || 0) > (max?.book?.page_count || 0) ? e : max),
+    yearEntries[0] || null
+  );
+  const shortestBook = yearEntries.reduce<YearEntry | null>(
+    (min, e) => {
+      const pc = e.book?.page_count;
+      const minPc = min?.book?.page_count;
+      return pc && (!minPc || pc < minPc) ? e : min;
+    },
+    yearEntries[0] || null
+  );
+
+  // Top-rated book of the year.
   let topRatedBook: { title: string; rating: number } | null = null;
-  yearBooks.forEach((yb) => {
-    const r = ratingByBook[yb.book_id];
-    if (r != null && (!topRatedBook || r > topRatedBook.rating)) {
-      topRatedBook = { title: (yb.book as any)?.title, rating: r };
+  yearEntries.forEach((e) => {
+    if (e.rating != null && (!topRatedBook || e.rating > topRatedBook.rating)) {
+      topRatedBook = { title: e.book?.title, rating: e.rating };
     }
   });
 
-  // Every book from the selected year, with its rating, best first.
-  const yearBooksList = yearBooks
-    .map((yb) => ({
-      bookId: yb.book_id,
-      title: (yb.book as any)?.title || "",
-      coverUrl: (yb.book as any)?.cover_url || null,
-      rating: ratingByBook[yb.book_id] ?? null,
+  // Every read from the year, with its rating, best first.
+  const yearBooksList = yearEntries
+    .map((e) => ({
+      bookId: e.book_id,
+      title: e.book?.title || "",
+      coverUrl: e.book?.cover_url || null,
+      rating: e.rating,
+      reread: e.reread,
     }))
     .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1));
 
   // Countries represented in the selected year.
   const yearCountryCounts: Record<string, number> = {};
-  yearBooks.forEach((ub) => {
-    (ub.book as any)?.author_countries?.forEach((c: string) => {
+  yearEntries.forEach((e) => {
+    e.book?.author_countries?.forEach((c: string) => {
       if (c && c !== "Unknown") yearCountryCounts[c] = (yearCountryCounts[c] || 0) + 1;
     });
   });
@@ -436,21 +460,22 @@ export async function GET(request: Request) {
     .map(([country, count]) => ({ country, count }))
     .sort((a, b) => b.count - a.count);
 
-  // Years that have finished books (plus the current year), newest first.
+  // Years that have finished books or re-reads (plus the current year), newest first.
   const availableYears = Array.from(
-    new Set(
-      books.filter((b) => b.finished_at).map((b) => new Date(b.finished_at!).getFullYear())
-    )
+    new Set([
+      ...books.filter((b) => b.finished_at).map((b) => new Date(b.finished_at!).getFullYear()),
+      ...rereadLogs.filter((r) => r.created_at).map((r) => new Date(r.created_at).getFullYear()),
+    ])
   );
   if (!availableYears.includes(currentYear)) availableYears.push(currentYear);
   availableYears.sort((a, b) => b - a);
 
   const yearInReview = {
     year: selectedYear,
-    totalBooks: yearBooks.length,
+    totalBooks: yearEntries.length,
     totalPages: yearPages,
-    longestBook: longestBook ? { title: (longestBook.book as any)?.title, pages: (longestBook.book as any)?.page_count } : null,
-    shortestBook: shortestBook ? { title: (shortestBook.book as any)?.title, pages: (shortestBook.book as any)?.page_count } : null,
+    longestBook: longestBook ? { title: (longestBook as YearEntry).book?.title, pages: (longestBook as YearEntry).book?.page_count } : null,
+    shortestBook: shortestBook ? { title: (shortestBook as YearEntry).book?.title, pages: (shortestBook as YearEntry).book?.page_count } : null,
     topRatedBook,
     pulledQuote,
     authorCountries: yearCountries,
@@ -460,7 +485,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     scope,
     availableYears,
-    booksPerMonth,
+    booksPerYear,
     topAuthors,
     authorCountries,
     genres,

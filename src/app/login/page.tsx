@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { AmbientQuote } from "@/components/shared/ambient-quote";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -51,6 +52,8 @@ export default function LoginPage() {
           </h1>
           <p className="text-[var(--muted)]">Sign in to your reading life</p>
         </div>
+
+        <AmbientQuote curatedOnly className="text-center" />
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>

@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, BookMarked, BarChart3 } from "lucide-react";
+import { Users, BookMarked, BarChart3, Quote } from "lucide-react";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 
 const tabs = [
   { href: "/club", label: "Club", icon: Users },
   { href: "/personal", label: "Personal", icon: BookMarked },
+  { href: "/quotes", label: "Quotes", icon: Quote },
   { href: "/insights", label: "Insights", icon: BarChart3 },
 ];
 
@@ -17,7 +18,7 @@ export function BottomNav() {
   return (
     <nav className="fixed top-0 left-0 right-0 bg-[var(--surface)] border-b border-[var(--border)] z-50">
       <div className="max-w-lg mx-auto flex items-center justify-between px-4 py-2.5">
-        <Link href="/club" className="font-serif font-bold text-lg text-coral hidden min-[420px]:block">
+        <Link href="/club" className="font-serif font-bold text-lg text-coral hidden min-[480px]:block">
           Goon Squad
         </Link>
         <div className="flex items-center gap-0.5">
@@ -28,6 +29,7 @@ export function BottomNav() {
               <Link
                 key={tab.href}
                 href={tab.href}
+                aria-label={tab.label}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   active
                     ? "bg-coral text-white"
@@ -35,7 +37,7 @@ export function BottomNav() {
                 }`}
               >
                 <Icon className="w-4 h-4 flex-shrink-0" />
-                <span className={active ? "inline" : "hidden min-[360px]:inline"}>{tab.label}</span>
+                <span className={active ? "inline" : "hidden min-[560px]:inline"}>{tab.label}</span>
               </Link>
             );
           })}

@@ -6,6 +6,7 @@ import { BookCover } from "@/components/ui/book-cover";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ClubBookSheet } from "@/components/shared/club-book-sheet";
+import { AmbientQuote } from "@/components/shared/ambient-quote";
 import { useToast } from "@/components/ui/toast";
 import { Copy, Check, Share2, UserPlus, Search, Loader2, BookOpen, MessageCircle, Sparkles, Plus, Camera, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
@@ -572,6 +573,12 @@ export default function ClubPage() {
         </div>
       </div>
 
+      <AmbientQuote
+        scope="club"
+        greeting="Welcome back"
+        className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-4"
+      />
+
       {/* Inline pick-book search — expands in normal flow so it stays visible */}
       {pickBookOpen && (
         <div className="space-y-3">
@@ -857,7 +864,7 @@ export default function ClubPage() {
             })}
           </div>
         ) : (
-          <EmptyState message="No books on the shelf yet. Add one you've read." icon={BookOpen} />
+          <EmptyState message="No books on the shelf yet. Add one you've read." icon={BookOpen} withQuote />
         )}
       </section>
 

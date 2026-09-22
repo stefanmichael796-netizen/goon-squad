@@ -6,6 +6,7 @@ import { BookCover } from "@/components/ui/book-cover";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PersonalBookSheet } from "@/components/shared/personal-book-sheet";
+import { AmbientQuote } from "@/components/shared/ambient-quote";
 import { useToast } from "@/components/ui/toast";
 import { Search, Loader2, BookOpen, Plus, LogOut, ChevronLeft, ChevronRight, CheckCircle2, RotateCw } from "lucide-react";
 import Link from "next/link";
@@ -381,6 +382,11 @@ export default function PersonalPage() {
         </button>
       </div>
 
+      <AmbientQuote
+        scope="me"
+        className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-4"
+      />
+
       {/* Top 5 */}
       <section>
         <h2 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-3">
@@ -671,7 +677,7 @@ export default function PersonalPage() {
             })}
           </div>
         ) : (
-          <EmptyState message="Your shelf is waiting. Add a book you've read." icon={BookOpen} />
+          <EmptyState message="Your shelf is waiting. Add a book you've read." icon={BookOpen} withQuote />
         )}
       </section>
 

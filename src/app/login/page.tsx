@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { AmbientQuote } from "@/components/shared/ambient-quote";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -53,7 +52,14 @@ export default function LoginPage() {
           <p className="text-[var(--muted)]">Sign in to your reading life</p>
         </div>
 
-        <AmbientQuote curatedOnly className="text-center" />
+        <blockquote className="text-center">
+          <p className="font-serif italic text-[var(--foreground)] leading-relaxed">
+            &ldquo;Time&rsquo;s a goon, right? You gonna let that goon push you around?&rdquo;
+          </p>
+          <p className="text-xs text-[var(--muted)] mt-1.5">
+            — Jennifer Egan, A Visit from the Goon Squad
+          </p>
+        </blockquote>
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>

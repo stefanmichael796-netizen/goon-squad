@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation";
 
 const GOON_QUOTES = [
   "Time’s a goon, right? You gonna let that goon push you around?",
-  "Sure, everything is ending. But not yet.",
+  "Sure, everything is ending, but not yet.",
+  "I’m always happy. Sometimes I just forget.",
 ];
 
 export default function LoginPage() {

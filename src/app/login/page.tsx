@@ -1,17 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+
+const GOON_QUOTES = [
+  "Time’s a goon, right? You gonna let that goon push you around?",
+  "Sure, everything is ending. But not yet.",
+];
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [quoteIndex, setQuoteIndex] = useState(0);
   const router = useRouter();
   const supabase = createClient();
+
+  useEffect(() => {
+    setQuoteIndex(Math.floor(Math.random() * GOON_QUOTES.length));
+    const t = setInterval(() => setQuoteIndex((n) => (n + 1) % GOON_QUOTES.length), 9000);
+    return () => clearInterval(t);
+  }, []);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -53,8 +65,8 @@ export default function LoginPage() {
         </div>
 
         <blockquote className="text-center">
-          <p className="font-serif italic text-[var(--foreground)] leading-relaxed">
-            &ldquo;Time&rsquo;s a goon, right? You gonna let that goon push you around?&rdquo;
+          <p key={quoteIndex} className="font-serif italic text-[var(--foreground)] leading-relaxed animate-fade-in">
+            &ldquo;{GOON_QUOTES[quoteIndex]}&rdquo;
           </p>
           <p className="text-xs text-[var(--muted)] mt-1.5">
             — Jennifer Egan, A Visit from the Goon Squad
